@@ -26,9 +26,6 @@ def load_user(user_id):
     from models.user import User
     return User.query.get(int(user_id))
 
-# Register blueprints
-# app.register_blueprint(events_bp, url_prefix='/api/events')
-# app.register_blueprint(auth_bp, url_prefix='/api/auth')
 CORS(app)
 
 # Logger instance
