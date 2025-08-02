@@ -28,6 +28,18 @@ def create_app():
         # Register blueprints
         from Backend.routes.auth import auth_bp
         from Backend.routes.events import events_bp
+        from Backend.routes.admin_auth import admin_auth_bp
+        from Backend.routes.admin_event import admin_event_bp
+        from Backend.routes.admin_user_mgmt import admin_user_bp
+        from Backend.routes.admin_logs import admin_logs_bp
+        from Backend.routes.admin_settings import admin_settings_bp
+        from Backend.routes.admin_stats import admin_stats_bp
+        app.register_blueprint(admin_auth_bp, url_prefix='/api/admin')
+        app.register_blueprint(admin_event_bp, url_prefix='/api/admin')
+        app.register_blueprint(admin_user_bp, url_prefix='/api/admin')
+        app.register_blueprint(admin_logs_bp, url_prefix='/api/admin')
+        app.register_blueprint(admin_settings_bp, url_prefix='/api/admin')
+        app.register_blueprint(admin_stats_bp, url_prefix='/api/admin')
         app.register_blueprint(events_bp, url_prefix='/api/events')
         app.register_blueprint(auth_bp, url_prefix='/api/auth')
     

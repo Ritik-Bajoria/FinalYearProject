@@ -17,6 +17,8 @@ class Event(db.Model):
     capacity = db.Column(db.Integer, default=100)
     is_recurring = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    status = db.Column(db.String(30), default='pending')  # e.g., 'pending', 'approved', 'rejected'
+
     
     # Add club relationship
     club_id = db.Column(db.Integer, db.ForeignKey('clubs.club_id', ondelete='SET NULL'))
