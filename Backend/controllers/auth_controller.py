@@ -46,7 +46,7 @@ class AuthController:
         # Add role-specific data
         if role_data.get('student'):
             response_data['student'] = {
-                'student_id': role_data['student'].student_id,
+                'user_id': role_data['student'].user_id,
                 'full_name': role_data['student'].full_name,
                 'student_id_number': role_data['student'].student_id_number,
                 'year_of_study': role_data['student'].year_of_study,
@@ -64,7 +64,7 @@ class AuthController:
             }
         elif role_data.get('admin'):
             response_data['admin'] = {
-                'admin_id': role_data['admin'].admin_id,
+                'user_id': role_data['admin'].user_id,
                 'full_name': role_data['admin'].full_name,
                 'admin_role': role_data['admin'].admin_role,
                 'permissions_level': role_data['admin'].permissions_level

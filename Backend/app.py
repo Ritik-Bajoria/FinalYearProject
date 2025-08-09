@@ -140,11 +140,11 @@ if __name__ == '__main__':
 
     # Sync tables based on environment
     # print(os.getenv('FLASK_ENV'))
-    # if os.getenv('FLASK_ENV') == 'development':
-    #     # In development, you might want to force recreate tables
-    #     if not sync_tables({'force': True}):
-    #         logger.error("Exiting due to table sync failure")
-    #         sys.exit(1)
+    if os.getenv('FLASK_ENV') == 'development':
+        # In development, you might want to force recreate tables
+        if not sync_tables({'force': True}):
+            logger.error("Exiting due to table sync failure")
+            sys.exit(1)
     # else:
     #     # In production, just ensure tables exist
     #     if not sync_tables():

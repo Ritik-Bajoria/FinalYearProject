@@ -27,7 +27,7 @@ admin_auth_bp = Blueprint('admin_auth', __name__, url_prefix='/admin')
     
 #     return jsonify({
 #         'token': token,
-#         'admin_id': admin.admin_id,
+#         'user_id': admin.user_id,
 #         'permissions_level': admin.permissions_level
 #     })
 
@@ -37,6 +37,6 @@ admin_auth_bp = Blueprint('admin_auth', __name__, url_prefix='/admin')
 def verify_session(current_user):
     admin = Admin.query.filter_by(user_id=current_user.user_id).first()
     return jsonify({
-        'admin_id': admin.admin_id,
+        'user_id': admin.user_id,
         'permissions_level': admin.permissions_level
     })

@@ -61,8 +61,8 @@ def get_events():
     })
 
 @admin_event_bp.route('/events/<int:event_id>/status', methods=['PATCH'])
-# @token_required
-# @admin_required
+@token_required
+@admin_required
 def update_event_status(current_user, event_id):
     data = request.get_json()
     status = data.get('status')

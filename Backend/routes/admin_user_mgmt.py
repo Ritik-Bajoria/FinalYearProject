@@ -57,7 +57,7 @@ def get_users(current_user):
             user_data.update({
                 'full_name': user.student.full_name,
                 'role': 'student',
-                'student_id': user.student.student_id_number
+                'user_id': user.student.student_id_number
             })
         elif user.faculty:
             user_data.update({

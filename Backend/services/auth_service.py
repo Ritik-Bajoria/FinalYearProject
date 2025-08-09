@@ -117,7 +117,7 @@ class AuthService:
         role_data = {}
         if user.student:
             role_data['student'] = {
-                'student_id': user.student.student_id,
+                'user_id': user.student.user_id,
                 'full_name': user.student.full_name,
                 'student_id_number': user.student.student_id_number,
                 'year_of_study': user.student.year_of_study,
@@ -135,7 +135,7 @@ class AuthService:
             }
         elif user.admin:
             role_data['admin'] = {
-                'admin_id': user.admin.admin_id,
+                'user_id': user.admin.user_id,
                 'full_name': user.admin.full_name,
                 'admin_role': user.admin.admin_role,
                 'permissions_level': user.admin.permissions_level
