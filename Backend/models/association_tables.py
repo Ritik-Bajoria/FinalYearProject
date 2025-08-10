@@ -3,9 +3,9 @@ from Backend import db
 from enum import Enum
 
 class ClubMembershipStatus(Enum):
-    PENDING = 'pending'
-    APPROVED = 'approved'
-    REJECTED = 'rejected'
+    PENDING = 'PENDING'
+    APPROVED = 'APPROVED'
+    REJECTED = 'REJECTED'
 
 user_club_association = db.Table(
     'user_club_association',

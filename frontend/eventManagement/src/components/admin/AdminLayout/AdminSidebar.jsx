@@ -5,7 +5,7 @@ import {
   Activity, 
   Settings 
 } from 'lucide-react';
-import NavButton from './NavButton';
+import NavButton from '../../NavButton';
 
 const AdminSidebar = ({ activeTab, setActiveTab }) => {
   return (
