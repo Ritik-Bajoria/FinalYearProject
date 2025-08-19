@@ -47,8 +47,6 @@ import {
 } from '@mui/icons-material';
 import useClubDashboardApi from '../../hooks/useClubDashboardApi';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-
 const ClubDashboard = ({ user }) => {
   const [openCreateDialog, setOpenCreateDialog] = useState(false);
   const [openErrorDialog, setOpenErrorDialog] = useState(false);
@@ -82,45 +80,45 @@ const ClubDashboard = ({ user }) => {
     leaveClub
   } = useClubDashboardApi(user?.user_id);
 
-const handleJoinClub = async (clubId) => {
-  // Frontend validation - check if user is already a member of any club
-  const isAlreadyMember = clubs.some(club => isClubMember(club));
-  if (isAlreadyMember) {
-    showErrorDialog("You are already a member of a club. Please leave your current club before joining another.");
-    return;
-  }
-
-  try {
-    await joinClub(clubId);
-    showNotification('Join request sent successfully!', 'success');
-    await refetch();
-  } catch (err) {
-    if (err.message.includes('already a member of another club')) {
-      showErrorDialog(err.message);
-    } else {
-      showNotification(err.message || 'Failed to send join request', 'error');
+  const handleJoinClub = async (clubId) => {
+    // Frontend validation - check if user is already a member of any club
+    const isAlreadyMember = clubs.some(club => isClubMember(club));
+    if (isAlreadyMember) {
+      showErrorDialog("You are already a member of a club. Please leave your current club before joining another.");
+      return;
     }
-  }
-};
 
-const handleLeaveClub = async (clubId) => {
-  // Find the club in the clubs array
-  const clubToLeave = clubs.find(club => club.club_id === clubId);
-  
-  // Frontend validation - check if user is the leader
-  if (clubToLeave && isClubLeader(clubToLeave)) {
-    showErrorDialog("You cannot leave as club leader. Please transfer leadership to another member first.");
-    return;
-  }
+    try {
+      await joinClub(clubId);
+      showNotification('Join request sent successfully!', 'success');
+      await refetch();
+    } catch (err) {
+      if (err.message.includes('already a member of another club')) {
+        showErrorDialog(err.message);
+      } else {
+        showNotification(err.message || 'Failed to send join request', 'error');
+      }
+    }
+  };
 
-  try {
-    await leaveClub(clubId);
-    showNotification('Successfully left the club', 'success');
-    await refetch();
-  } catch (err) {
-    showNotification(err.message || 'Failed to leave club', 'error');
-  }
-};
+  const handleLeaveClub = async (clubId) => {
+    // Find the club in the clubs array
+    const clubToLeave = clubs.find(club => club.club_id === clubId);
+    
+    // Frontend validation - check if user is the leader
+    if (clubToLeave && isClubLeader(clubToLeave)) {
+      showErrorDialog("You cannot leave as club leader. Please transfer leadership to another member first.");
+      return;
+    }
+
+    try {
+      await leaveClub(clubId);
+      showNotification('Successfully left the club', 'success');
+      await refetch();
+    } catch (err) {
+      showNotification(err.message || 'Failed to leave club', 'error');
+    }
+  };
 
   const handleCreateClub = async () => {
     // Check if user is already a member of any club
@@ -201,25 +199,25 @@ const handleLeaveClub = async (clubId) => {
 
   // Loading skeleton for cards
   const LoadingSkeleton = () => (
-    <Grid container spacing={3}>
+    <Grid container spacing={2}>
       {[...Array(6)].map((_, index) => (
         <Grid item xs={12} sm={6} md={4} key={index}>
-          <Card sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
-            <Skeleton variant="rectangular" height={180} />
-            <CardContent sx={{ p: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                <Skeleton variant="circular" width={56} height={56} />
+          <Card sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider', height: 320 }}>
+            <Skeleton variant="rectangular" height={140} />
+            <CardContent sx={{ p: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+                <Skeleton variant="circular" width={48} height={48} />
                 <Box sx={{ flex: 1 }}>
-                  <Skeleton variant="text" sx={{ fontSize: '1.1rem', mb: 1 }} />
-                  <Skeleton variant="rectangular" width={80} height={24} sx={{ borderRadius: 1 }} />
+                  <Skeleton variant="text" sx={{ fontSize: '1rem', mb: 0.5 }} />
+                  <Skeleton variant="rectangular" width={70} height={20} sx={{ borderRadius: 1 }} />
                 </Box>
               </Box>
-              <Skeleton variant="text" sx={{ mb: 1 }} />
-              <Skeleton variant="text" sx={{ mb: 1 }} />
+              <Skeleton variant="text" sx={{ mb: 0.5 }} />
+              <Skeleton variant="text" sx={{ mb: 0.5 }} />
               <Skeleton variant="text" width="60%" />
             </CardContent>
-            <CardActions sx={{ p: 3, pt: 0 }}>
-              <Skeleton variant="rectangular" width={120} height={36} sx={{ borderRadius: 1 }} />
+            <CardActions sx={{ p: 2, pt: 0 }}>
+              <Skeleton variant="rectangular" width={100} height={32} sx={{ borderRadius: 1 }} />
             </CardActions>
           </Card>
         </Grid>
@@ -229,12 +227,12 @@ const handleLeaveClub = async (clubId) => {
 
   if (loading && !clubs.length) {
     return (
-      <Container maxWidth="xl" sx={{ py: 4 }}>
-        <Box sx={{ mb: 4 }}>
-          <Skeleton variant="text" sx={{ fontSize: '2rem', mb: 2, width: 200 }} />
-          <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
-            <Skeleton variant="rectangular" height={56} sx={{ flex: 1, borderRadius: 2 }} />
-            <Skeleton variant="rectangular" width={150} height={56} sx={{ borderRadius: 2 }} />
+      <Container maxWidth="xl" sx={{ py: 2 }}>
+        <Box sx={{ mb: 3 }}>
+          <Skeleton variant="text" sx={{ fontSize: '1.8rem', mb: 1, width: 200 }} />
+          <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+            <Skeleton variant="rectangular" height={48} sx={{ flex: 1, borderRadius: 2 }} />
+            <Skeleton variant="rectangular" width={140} height={48} sx={{ borderRadius: 2 }} />
           </Box>
         </Box>
         <LoadingSkeleton />
@@ -244,19 +242,20 @@ const handleLeaveClub = async (clubId) => {
 
   if (error) {
     return (
-      <Container maxWidth="xl" sx={{ py: 8 }}>
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-          <Paper sx={{ p: 4, textAlign: 'center', maxWidth: 500 }}>
-            <ErrorIcon color="error" sx={{ fontSize: 64, mb: 2 }} />
-            <Typography variant="h5" gutterBottom color="error">
+      <Container maxWidth="xl" sx={{ py: 4 }}>
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="300px">
+          <Paper sx={{ p: 3, textAlign: 'center', maxWidth: 400 }}>
+            <ErrorIcon color="error" sx={{ fontSize: 48, mb: 1 }} />
+            <Typography variant="h6" gutterBottom color="error">
               Something went wrong
             </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               {error}
             </Typography>
             <Button
               variant="contained"
               onClick={refetch}
+              size="small"
               sx={{ borderRadius: 2 }}
             >
               Try Again
@@ -268,11 +267,11 @@ const handleLeaveClub = async (clubId) => {
   }
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
+    <Container maxWidth="xl" sx={{ py: 2 }}>
       {/* Notification Snackbar */}
       <Snackbar
         open={notification.open}
-        autoHideDuration={6000}
+        autoHideDuration={5000}
         onClose={handleCloseNotification}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
@@ -282,8 +281,9 @@ const handleLeaveClub = async (clubId) => {
           sx={{
             width: '100%',
             borderRadius: 2,
+            fontSize: '0.85rem',
             '& .MuiAlert-icon': {
-              fontSize: '1.5rem'
+              fontSize: '1.25rem'
             }
           }}
           elevation={6}
@@ -295,121 +295,122 @@ const handleLeaveClub = async (clubId) => {
 
       {/* Error Dialog */}
       <Dialog
-  open={openErrorDialog}
-  onClose={handleCloseErrorDialog}
-  maxWidth="xs"
-  fullWidth
-  PaperProps={{
-    sx: { 
-      borderRadius: 6,
-      border: 'none',
-      background: 'rgba(255, 255, 255, 0.95)',
-      backdropFilter: 'blur(20px)',
-      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.15)',
-      overflow: 'visible',
-      position: 'relative'
-    }
-  }}
-  BackdropProps={{
-    sx: {
-      backgroundColor: 'rgba(0, 0, 0, 0.3)',
-      backdropFilter: 'blur(4px)'
-    }
-  }}
->
-  {/* Animated error indicator */}
-  <Box
-    sx={{
-      position: 'absolute',
-      top: -20,
-      left: '50%',
-      transform: 'translateX(-50%)',
-      width: 40,
-      height: 40,
-      background: 'linear-gradient(135deg, #ff4757, #ff3742)',
-      borderRadius: '50%',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      animation: 'pulse 2s infinite',
-      '@keyframes pulse': {
-        '0%': { boxShadow: '0 0 0 0 rgba(255, 71, 87, 0.4)' },
-        '70%': { boxShadow: '0 0 0 10px rgba(255, 71, 87, 0)' },
-        '100%': { boxShadow: '0 0 0 0 rgba(255, 71, 87, 0)' }
-      }
-    }}
-  >
-    <ErrorIcon sx={{ color: 'white', fontSize: '1.2rem' }} />
-  </Box>
+        open={openErrorDialog}
+        onClose={handleCloseErrorDialog}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: { 
+            borderRadius: 4,
+            border: 'none',
+            background: 'rgba(255, 255, 255, 0.95)',
+            backdropFilter: 'blur(20px)',
+            boxShadow: '0 20px 40px -12px rgba(0, 0, 0, 0.15)',
+            overflow: 'visible',
+            position: 'relative'
+          }
+        }}
+        BackdropProps={{
+          sx: {
+            backgroundColor: 'rgba(0, 0, 0, 0.3)',
+            backdropFilter: 'blur(4px)'
+          }
+        }}
+      >
+        {/* Animated error indicator */}
+        <Box
+          sx={{
+            position: 'absolute',
+            top: -15,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: 30,
+            height: 30,
+            background: 'linear-gradient(135deg, #ff4757, #ff3742)',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            animation: 'pulse 2s infinite',
+            '@keyframes pulse': {
+              '0%': { boxShadow: '0 0 0 0 rgba(255, 71, 87, 0.4)' },
+              '70%': { boxShadow: '0 0 0 8px rgba(255, 71, 87, 0)' },
+              '100%': { boxShadow: '0 0 0 0 rgba(255, 71, 87, 0)' }
+            }
+          }}
+        >
+          <ErrorIcon sx={{ color: 'white', fontSize: '1rem' }} />
+        </Box>
 
-  <DialogContent sx={{ 
-    textAlign: 'center',
-    p: 4,
-    pt: 5
-  }}>
-    <Typography 
-      variant="h6" 
-      sx={{
-        fontWeight: 500,
-        color: '#2d3748',
-        mb: 2,
-        fontSize: '1.1rem'
-      }}
-    >
-      Something went wrong
-    </Typography>
-    
-    <Typography 
-      variant="body2" 
-      sx={{
-        color: '#64748b',
-        lineHeight: 1.5,
-        fontSize: '0.9rem',
-        mb: 3
-      }}
-    >
-      {errorMessage}
-    </Typography>
+        <DialogContent sx={{ 
+          textAlign: 'center',
+          p: 3,
+          pt: 4
+        }}>
+          <Typography 
+            variant="subtitle1" 
+            sx={{
+              fontWeight: 500,
+              color: '#2d3748',
+              mb: 1.5,
+              fontSize: '1rem'
+            }}
+          >
+            Something went wrong
+          </Typography>
+          
+          <Typography 
+            variant="body2" 
+            sx={{
+              color: '#64748b',
+              lineHeight: 1.4,
+              fontSize: '0.85rem',
+              mb: 2.5
+            }}
+          >
+            {errorMessage}
+          </Typography>
 
-    <Button
-      onClick={handleCloseErrorDialog}
-      variant="text"
-      sx={{ 
-        borderRadius: 3,
-        px: 3,
-        py: 1.2,
-        color: '#ff4757',
-        fontWeight: 500,
-        fontSize: '0.9rem',
-        textTransform: 'none',
-        background: 'rgba(255, 71, 87, 0.08)',
-        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-        minWidth: 120,
-        '&:hover': {
-          background: 'rgba(255, 71, 87, 0.12)',
-          transform: 'translateY(-1px)'
-        }
-      }}
-    >
-      Got it
-    </Button>
-  </DialogContent>
-</Dialog>
+          <Button
+            onClick={handleCloseErrorDialog}
+            variant="text"
+            size="small"
+            sx={{ 
+              borderRadius: 2,
+              px: 2.5,
+              py: 1,
+              color: '#ff4757',
+              fontWeight: 500,
+              fontSize: '0.85rem',
+              textTransform: 'none',
+              background: 'rgba(255, 71, 87, 0.08)',
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              minWidth: 100,
+              '&:hover': {
+                background: 'rgba(255, 71, 87, 0.12)',
+                transform: 'translateY(-1px)'
+              }
+            }}
+          >
+            Got it
+          </Button>
+        </DialogContent>
+      </Dialog>
 
       {/* Header Section */}
-      <Box sx={{ mb: 6 }}>
+      <Box sx={{ mb: 4 }}>
         <Typography
-          variant="h4"
+          variant="h5"
           fontWeight="600"
           color="text.primary"
-          sx={{ mb: 1 }}
+          sx={{ mb: 0.5 }}
         >
           Student Clubs
         </Typography>
         <Typography
-          variant="body1"
+          variant="body2"
           color="text.secondary"
-          sx={{ mb: 4 }}
+          sx={{ mb: 3 }}
         >
           Discover and join clubs that match your interests
         </Typography>
@@ -422,6 +423,7 @@ const handleLeaveClub = async (clubId) => {
         >
           <TextField
             fullWidth
+            size="small"
             variant="outlined"
             placeholder="Search clubs by name, category, or description..."
             value={searchTerm}
@@ -429,12 +431,13 @@ const handleLeaveClub = async (clubId) => {
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <SearchIcon color="action" />
+                  <SearchIcon color="action" sx={{ fontSize: '1.1rem' }} />
                 </InputAdornment>
               ),
               sx: {
-                borderRadius: 3,
+                borderRadius: 2,
                 backgroundColor: 'background.paper',
+                fontSize: '0.85rem',
                 '& .MuiOutlinedInput-root': {
                   '&:hover fieldset': {
                     borderColor: 'primary.main',
@@ -442,23 +445,25 @@ const handleLeaveClub = async (clubId) => {
                 }
               }
             }}
-            sx={{ maxWidth: { sm: 400 } }}
+            sx={{ maxWidth: { sm: 350 } }}
           />
 
           <Button
             variant="contained"
-            startIcon={<AddIcon />}
+            size="small"
+            startIcon={<AddIcon sx={{ fontSize: '1rem' }} />}
             onClick={() => setOpenCreateDialog(true)}
             sx={{
-              borderRadius: 3,
-              px: 3,
-              py: 1.5,
-              minWidth: 160,
+              borderRadius: 2,
+              px: 2.5,
+              py: 1,
+              minWidth: 140,
               textTransform: 'none',
               fontWeight: 600,
-              boxShadow: '0 2px 12px rgba(25, 118, 210, 0.3)',
+              fontSize: '0.85rem',
+              boxShadow: '0 2px 8px rgba(25, 118, 210, 0.3)',
               '&:hover': {
-                boxShadow: '0 4px 20px rgba(25, 118, 210, 0.4)',
+                boxShadow: '0 4px 16px rgba(25, 118, 210, 0.4)',
               }
             }}
           >
@@ -471,19 +476,19 @@ const handleLeaveClub = async (clubId) => {
       {filteredClubs.length === 0 && !loading ? (
         <Fade in>
           <Paper sx={{
-            p: 8,
+            p: 5,
             textAlign: 'center',
             backgroundColor: 'grey.50',
             border: '2px dashed',
             borderColor: 'grey.200',
             borderRadius: 3
           }}>
-            <Box sx={{ maxWidth: 400, mx: 'auto' }}>
-              <PeopleIcon sx={{ fontSize: 80, color: 'grey.400', mb: 3 }} />
-              <Typography variant="h5" fontWeight="500" gutterBottom>
+            <Box sx={{ maxWidth: 350, mx: 'auto' }}>
+              <PeopleIcon sx={{ fontSize: 64, color: 'grey.400', mb: 2 }} />
+              <Typography variant="h6" fontWeight="500" gutterBottom>
                 {searchTerm ? 'No matching clubs found' : 'No clubs available yet'}
               </Typography>
-              <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
                 {searchTerm
                   ? 'Try adjusting your search terms or browse all clubs'
                   : 'Be the first to create a club and bring students together!'
@@ -492,6 +497,7 @@ const handleLeaveClub = async (clubId) => {
               {searchTerm ? (
                 <Button
                   variant="outlined"
+                  size="small"
                   onClick={() => setSearchTerm('')}
                   sx={{ borderRadius: 2 }}
                 >
@@ -500,6 +506,7 @@ const handleLeaveClub = async (clubId) => {
               ) : (
                 <Button
                   variant="contained"
+                  size="small"
                   startIcon={<AddIcon />}
                   onClick={() => setOpenCreateDialog(true)}
                   sx={{ borderRadius: 2 }}
@@ -512,30 +519,30 @@ const handleLeaveClub = async (clubId) => {
         </Fade>
       ) : (
         <Fade in>
-          <Grid container spacing={3}>
+          <Grid container spacing={2}>
             {filteredClubs.map((club) => (
               <Grid item xs={12} sm={6} lg={4} key={club.club_id}>
                 <Card sx={{
-                  height: '100%',
+                  height: 320,
                   display: 'flex',
                   flexDirection: 'column',
-                  borderRadius: 4,
+                  borderRadius: 3,
                   border: 'none',
-                  boxShadow: '0 2px 20px rgba(0,0,0,0.06)',
+                  boxShadow: '0 2px 16px rgba(0,0,0,0.06)',
                   transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
                   cursor: 'pointer',
                   position: 'relative',
                   overflow: 'hidden',
                   backgroundColor: 'background.paper',
                   '&:hover': {
-                    transform: 'translateY(-12px) scale(1.02)',
-                    boxShadow: '0 20px 60px rgba(0,0,0,0.12)',
+                    transform: 'translateY(-8px) scale(1.015)',
+                    boxShadow: '0 16px 48px rgba(0,0,0,0.12)',
                     '& .club-image': {
-                      transform: 'scale(1.08)',
+                      transform: 'scale(1.05)',
                     },
                     '& .club-avatar': {
                       transform: 'scale(1.1)',
-                      boxShadow: '0 8px 25px rgba(0,0,0,0.2)',
+                      boxShadow: '0 6px 20px rgba(0,0,0,0.2)',
                     },
                     '& .hover-overlay': {
                       opacity: 1,
@@ -548,7 +555,7 @@ const handleLeaveClub = async (clubId) => {
                     top: 0,
                     left: 0,
                     right: 0,
-                    height: 4,
+                    height: 3,
                     background: isClubMember(club)
                         ? 'linear-gradient(90deg, #4CAF50, #2E7D32)'
                         : hasPendingRequest(club)
@@ -561,7 +568,7 @@ const handleLeaveClub = async (clubId) => {
                   <Box sx={{
                     position: 'relative',
                     overflow: 'hidden',
-                    height: 220,
+                    height: 140,
                     backgroundColor: 'grey.50'
                   }}>
                     <CardMedia
@@ -586,7 +593,7 @@ const handleLeaveClub = async (clubId) => {
                       bottom: 0,
                       left: 0,
                       right: 0,
-                      height: '50%',
+                      height: '40%',
                       background: 'linear-gradient(transparent, rgba(0,0,0,0.4))',
                       opacity: 0.8,
                     }} />
@@ -610,24 +617,25 @@ const handleLeaveClub = async (clubId) => {
                     {/* Member Count Badge */}
                     <Box sx={{
                       position: 'absolute',
-                      top: 16,
-                      right: 16,
+                      top: 12,
+                      right: 12,
                       zIndex: 2,
                     }}>
                       <Chip
-                        icon={<PeopleIcon />}
+                        icon={<PeopleIcon sx={{ fontSize: '0.9rem' }} />}
                         label={club.member_count}
                         size="small"
                         sx={{
+                          height: 24,
                           backgroundColor: 'rgba(255, 255, 255, 0.95)',
                           backdropFilter: 'blur(20px)',
-                          fontWeight: 700,
-                          fontSize: '0.75rem',
-                          borderRadius: 3,
+                          fontWeight: 600,
+                          fontSize: '0.7rem',
+                          borderRadius: 2,
                           border: '1px solid rgba(255, 255, 255, 0.2)',
-                          boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+                          boxShadow: '0 3px 16px rgba(0,0,0,0.1)',
                           '& .MuiChip-icon': {
-                            fontSize: '1rem',
+                            fontSize: '0.9rem',
                             color: 'primary.main'
                           },
                           '& .MuiChip-label': {
@@ -642,26 +650,27 @@ const handleLeaveClub = async (clubId) => {
                     {(isClubLeader(club) || isClubMember(club)) && (
                       <Box sx={{
                         position: 'absolute',
-                        top: 16,
-                        left: 16,
+                        top: 12,
+                        left: 12,
                         zIndex: 2,
                       }}>
                         <Chip
-                          icon={isClubLeader(club) ? <StarIcon /> : <CheckIcon />}
+                          icon={isClubLeader(club) ? <StarIcon sx={{ fontSize: '0.8rem' }} /> : <CheckIcon sx={{ fontSize: '0.8rem' }} />}
                           label={isClubLeader(club) ? "Leader" : "Member"}
                           size="small"
                           sx={{
+                            height: 24,
                             backgroundColor: isClubLeader(club)
                               ? 'rgba(255, 193, 7, 0.95)'
                               : 'rgba(76, 175, 80, 0.95)',
                             color: 'white',
-                            fontWeight: 700,
-                            fontSize: '0.7rem',
-                            borderRadius: 3,
+                            fontWeight: 600,
+                            fontSize: '0.65rem',
+                            borderRadius: 2,
                             backdropFilter: 'blur(20px)',
-                            boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                            boxShadow: '0 3px 16px rgba(0,0,0,0.15)',
                             '& .MuiChip-icon': {
-                              fontSize: '0.9rem',
+                              fontSize: '0.8rem',
                               color: 'white'
                             }
                           }}
@@ -681,11 +690,11 @@ const handleLeaveClub = async (clubId) => {
                     {/* Club Header with Floating Avatar */}
                     <Box sx={{
                       position: 'relative',
-                      px: 3,
-                      pt: 3,
-                      pb: 2,
+                      px: 2,
+                      pt: 2,
+                      pb: 1.5,
                     }}>
-                      <Stack direction="row" spacing={3} alignItems="flex-start">
+                      <Stack direction="row" spacing={2} alignItems="flex-start">
                         {/* Floating Avatar */}
                         <Avatar
                           src={club.logo_url
@@ -694,25 +703,25 @@ const handleLeaveClub = async (clubId) => {
                           }
                           className="club-avatar"
                           sx={{
-                            width: 72,
-                            height: 72,
-                            border: '4px solid',
+                            width: 48,
+                            height: 48,
+                            border: '3px solid',
                             borderColor: 'background.paper',
-                            boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                            boxShadow: '0 3px 16px rgba(0,0,0,0.15)',
                             transition: 'all 0.3s ease',
-                            mt: -4, // Floating effect
+                            mt: -3, // Floating effect
                             backgroundColor: 'background.paper',
                           }}
                           alt={`${club.name} logo`}
                         />
 
-                        <Box sx={{ flex: 1, minWidth: 0, pt: 1 }}>
+                        <Box sx={{ flex: 1, minWidth: 0, pt: 0.5 }}>
                           <Typography
-                            variant="h6"
+                            variant="subtitle1"
                             fontWeight="700"
                             sx={{
-                              mb: 1.5,
-                              fontSize: '1.25rem',
+                              mb: 1,
+                              fontSize: '1rem',
                               lineHeight: 1.2,
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
@@ -730,10 +739,10 @@ const handleLeaveClub = async (clubId) => {
                               label={club.category}
                               size="small"
                               sx={{
-                                height: 28,
-                                fontSize: '0.75rem',
+                                height: 22,
+                                fontSize: '0.65rem',
                                 fontWeight: 600,
-                                borderRadius: 3,
+                                borderRadius: 2,
                                 backgroundColor: 'primary.50',
                                 color: 'primary.700',
                                 border: '1px solid',
@@ -749,18 +758,18 @@ const handleLeaveClub = async (clubId) => {
                     </Box>
 
                     {/* Description */}
-                    <Box sx={{ px: 3, pb: 2, flexGrow: 1 }}>
+                    <Box sx={{ px: 2, pb: 1.5, flexGrow: 1 }}>
                       <Typography
                         variant="body2"
                         color="text.secondary"
                         sx={{
-                          lineHeight: 1.7,
+                          lineHeight: 1.5,
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           display: '-webkit-box',
                           WebkitLineClamp: 3,
                           WebkitBoxOrient: 'vertical',
-                          fontSize: '0.9rem',
+                          fontSize: '0.8rem',
                         }}
                       >
                         {club.description || 'No description available for this club.'}
@@ -775,25 +784,25 @@ const handleLeaveClub = async (clubId) => {
                     backgroundColor: 'grey.50',
                   }}>
                     <CardActions sx={{
-                      p: 3,
+                      p: 2,
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      minHeight: 72,
+                      minHeight: 56,
                     }}>
                       {/* Main Action Button */}
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                         { isClubMember(club) ? (
                           <>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               <Box sx={{
-                                width: 12,
-                                height: 12,
+                                width: 8,
+                                height: 8,
                                 borderRadius: '50%',
                                 backgroundColor: 'success.main',
-                                boxShadow: '0 0 0 3px rgba(76, 175, 80, 0.2)',
+                                boxShadow: '0 0 0 2px rgba(76, 175, 80, 0.2)',
                               }} />
-                              <Typography variant="body2" fontWeight={600} color="success.main">
+                              <Typography variant="caption" fontWeight={600} color="success.main">
                                 You're a member
                               </Typography>
                             </Box>
@@ -801,20 +810,20 @@ const handleLeaveClub = async (clubId) => {
                               size="small"
                               color="error"
                               variant="outlined"
-                              startIcon={<LeaveIcon />}
+                              startIcon={<LeaveIcon sx={{ fontSize: '0.9rem' }} />}
                               onClick={() => handleLeaveClub(club.club_id)}
                               sx={{
-                                borderRadius: 3,
+                                borderRadius: 2,
                                 textTransform: 'none',
-                                fontSize: '0.8rem',
+                                fontSize: '0.7rem',
                                 fontWeight: 600,
-                                px: 2,
+                                px: 1.5,
                                 py: 0.5,
-                                borderWidth: 2,
+                                borderWidth: 1.5,
                                 '&:hover': {
-                                  borderWidth: 2,
+                                  borderWidth: 1.5,
                                   transform: 'translateY(-1px)',
-                                  boxShadow: '0 4px 12px rgba(244, 67, 54, 0.3)',
+                                  boxShadow: '0 3px 10px rgba(244, 67, 54, 0.3)',
                                 }
                               }}
                             >
@@ -822,37 +831,37 @@ const handleLeaveClub = async (clubId) => {
                             </Button>
                           </>
                         ) : hasPendingRequest(club) ? (
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                             <Box sx={{
-                              width: 12,
-                              height: 12,
+                              width: 8,
+                              height: 8,
                               borderRadius: '50%',
                               backgroundColor: 'warning.main',
-                              boxShadow: '0 0 0 3px rgba(255, 152, 0, 0.2)',
+                              boxShadow: '0 0 0 2px rgba(255, 152, 0, 0.2)',
                             }} />
-                            <Typography variant="body2" fontWeight={600} color="warning.main">
+                            <Typography variant="caption" fontWeight={600} color="warning.main">
                               Request pending approval
                             </Typography>
                           </Box>
                         ) : (
                           <Button
-                            size="medium"
+                            size="small"
                             variant="contained"
                             onClick={() => handleJoinClub(club.club_id)}
                             sx={{
-                              borderRadius: 3,
+                              borderRadius: 2,
                               textTransform: 'none',
                               fontWeight: 700,
-                              fontSize: '0.85rem',
-                              px: 3,
-                              py: 1,
+                              fontSize: '0.75rem',
+                              px: 2,
+                              py: 0.8,
                               background: 'linear-gradient(135deg, #2196F3 0%, #21CBF3 100%)',
-                              boxShadow: '0 4px 20px rgba(33, 150, 243, 0.3)',
+                              boxShadow: '0 3px 16px rgba(33, 150, 243, 0.3)',
                               border: 'none',
                               '&:hover': {
                                 background: 'linear-gradient(135deg, #1976D2 0%, #0288D1 100%)',
                                 transform: 'translateY(-2px)',
-                                boxShadow: '0 8px 30px rgba(33, 150, 243, 0.4)',
+                                boxShadow: '0 6px 24px rgba(33, 150, 243, 0.4)',
                               },
                               '&:active': {
                                 transform: 'translateY(0px)',
@@ -868,17 +877,17 @@ const handleLeaveClub = async (clubId) => {
                       <Box sx={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 1,
+                        gap: 0.8,
                         backgroundColor: 'success.50',
-                        px: 2,
-                        py: 1,
-                        borderRadius: 3,
+                        px: 1.5,
+                        py: 0.8,
+                        borderRadius: 2,
                         border: '1px solid',
                         borderColor: 'success.100',
                       }}>
                         <Box sx={{
-                          width: 8,
-                          height: 8,
+                          width: 6,
+                          height: 6,
                           borderRadius: '50%',
                           backgroundColor: 'success.main',
                           animation: 'pulse 2s infinite',
@@ -889,7 +898,7 @@ const handleLeaveClub = async (clubId) => {
                             },
                             '70%': {
                               transform: 'scale(1)',
-                              boxShadow: '0 0 0 4px rgba(76, 175, 80, 0)',
+                              boxShadow: '0 0 0 3px rgba(76, 175, 80, 0)',
                             },
                             '100%': {
                               transform: 'scale(0.95)',
@@ -901,7 +910,7 @@ const handleLeaveClub = async (clubId) => {
                           variant="caption"
                           fontWeight={600}
                           color="success.main"
-                          sx={{ fontSize: '0.75rem' }}
+                          sx={{ fontSize: '0.65rem' }}
                         >
                           Active
                         </Typography>
@@ -931,10 +940,10 @@ const handleLeaveClub = async (clubId) => {
         <DialogTitle sx={{ pb: 1 }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
             <Box>
-              <Typography variant="h5" fontWeight="600">
+              <Typography variant="h6" fontWeight="600">
                 Create New Club
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
                 Start building your community
               </Typography>
             </Box>
@@ -943,6 +952,7 @@ const handleLeaveClub = async (clubId) => {
                 setOpenCreateDialog(false);
                 resetForm();
               }}
+              size="small"
               sx={{ color: 'grey.500' }}
             >
               <CloseIcon />
@@ -952,11 +962,12 @@ const handleLeaveClub = async (clubId) => {
 
         <Divider />
 
-        <DialogContent sx={{ py: 3 }}>
-          <Grid container spacing={3} direction="column">
+        <DialogContent sx={{ py: 2.5 }}>
+          <Grid container spacing={2.5} direction="column">
             <Grid item xs={12}>
               <TextField
                 fullWidth
+                size="small"
                 label="Club Name"
                 variant="outlined"
                 value={newClub.name}
@@ -973,6 +984,7 @@ const handleLeaveClub = async (clubId) => {
             <Grid item xs={12}>
               <TextField
                 fullWidth
+                size="small"
                 label="Short Description"
                 variant="outlined"
                 multiline
@@ -988,154 +1000,169 @@ const handleLeaveClub = async (clubId) => {
               />
             </Grid>
 
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Category</InputLabel>
-                <Select
-                  value={newClub.category}
-                  label="Category"
-                  onChange={(e) => setNewClub({ ...newClub, category: e.target.value })}
-                  sx={{ borderRadius: 2 }}
-                >
-                  {['Academic', 'Cultural', 'Sports', 'Technical', 'Social'].map((category) => (
-                    <MenuItem key={category} value={category}>
-                      {category}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
+            <Grid item xs={12}>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Category</InputLabel>
+                    <Select
+                      value={newClub.category}
+                      label="Category"
+                      onChange={(e) => setNewClub({ ...newClub, category: e.target.value })}
+                      sx={{ borderRadius: 2 }}
+                    >
+                      {['Academic', 'Cultural', 'Sports', 'Technical', 'Social'].map((category) => (
+                        <MenuItem key={category} value={category}>
+                          {category}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
 
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Additional Details"
-                variant="outlined"
-                value={newClub.club_details}
-                onChange={(e) => setNewClub({ ...newClub, club_details: e.target.value })}
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: 2
-                  }
-                }}
-              />
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Additional Details"
+                    variant="outlined"
+                    value={newClub.club_details}
+                    onChange={(e) => setNewClub({ ...newClub, club_details: e.target.value })}
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        borderRadius: 2
+                      }
+                    }}
+                  />
+                </Grid>
+              </Grid>
             </Grid>
 
             {/* File Uploads */}
-            <Grid item xs={12} sm={6}>
-              <Box>
-                <Typography variant="subtitle2" gutterBottom fontWeight={500}>
-                  Club Logo *
-                </Typography>
-                <input
-                  accept="image/*"
-                  id="logo-upload"
-                  type="file"
-                  onChange={(e) => handleFileChange(e, 'logo_file')}
-                  style={{ display: 'none' }}
-                />
-                <label htmlFor="logo-upload">
-                  <Button
-                    variant="outlined"
-                    component="span"
-                    startIcon={<UploadIcon />}
-                    sx={{
-                      borderRadius: 2,
-                      textTransform: 'none',
-                      mb: 2,
-                      borderStyle: 'dashed',
-                      borderWidth: 2,
-                      py: 1.5,
-                      width: '100%'
-                    }}
-                  >
-                    Upload Logo
-                  </Button>
-                </label>
-                {previewLogo && (
-                  <Paper sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
-                    <Avatar
-                      src={previewLogo}
-                      sx={{
-                        width: 80,
-                        height: 80,
-                        mx: 'auto',
-                        border: '2px solid',
-                        borderColor: 'divider'
-                      }}
+            <Grid item xs={12}>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <Box>
+                    <Typography variant="subtitle2" gutterBottom fontWeight={500} sx={{ fontSize: '0.85rem' }}>
+                      Club Logo *
+                    </Typography>
+                    <input
+                      accept="image/*"
+                      id="logo-upload"
+                      type="file"
+                      onChange={(e) => handleFileChange(e, 'logo_file')}
+                      style={{ display: 'none' }}
                     />
-                  </Paper>
-                )}
-              </Box>
-            </Grid>
+                    <label htmlFor="logo-upload">
+                      <Button
+                        variant="outlined"
+                        component="span"
+                        size="small"
+                        startIcon={<UploadIcon />}
+                        sx={{
+                          borderRadius: 2,
+                          textTransform: 'none',
+                          mb: 1.5,
+                          borderStyle: 'dashed',
+                          borderWidth: 2,
+                          py: 1,
+                          width: '100%',
+                          fontSize: '0.85rem'
+                        }}
+                      >
+                        Upload Logo
+                      </Button>
+                    </label>
+                    {previewLogo && (
+                      <Paper sx={{ p: 1.5, textAlign: 'center', borderRadius: 2 }}>
+                        <Avatar
+                          src={previewLogo}
+                          sx={{
+                            width: 60,
+                            height: 60,
+                            mx: 'auto',
+                            border: '2px solid',
+                            borderColor: 'divider'
+                          }}
+                        />
+                      </Paper>
+                    )}
+                  </Box>
+                </Grid>
 
-            <Grid item xs={12} sm={6}>
-              <Box>
-                <Typography variant="subtitle2" gutterBottom fontWeight={500}>
-                  Club Banner *
-                </Typography>
-                <input
-                  accept="image/*"
-                  id="banner-upload"
-                  type="file"
-                  onChange={(e) => handleFileChange(e, 'image_file')}
-                  style={{ display: 'none' }}
-                />
-                <label htmlFor="banner-upload">
-                  <Button
-                    variant="outlined"
-                    component="span"
-                    startIcon={<UploadIcon />}
-                    sx={{
-                      borderRadius: 2,
-                      textTransform: 'none',
-                      mb: 2,
-                      borderStyle: 'dashed',
-                      borderWidth: 2,
-                      py: 1.5,
-                      width: '100%'
-                    }}
-                  >
-                    Upload Banner
-                  </Button>
-                </label>
-                {previewImage && (
-                  <Paper sx={{ p: 1, borderRadius: 2 }}>
-                    <img
-                      src={previewImage}
-                      alt="Banner preview"
-                      style={{
-                        width: '100%',
-                        height: 120,
-                        objectFit: 'cover',
-                        borderRadius: 8
-                      }}
+                <Grid item xs={12} sm={6}>
+                  <Box>
+                    <Typography variant="subtitle2" gutterBottom fontWeight={500} sx={{ fontSize: '0.85rem' }}>
+                      Club Banner *
+                    </Typography>
+                    <input
+                      accept="image/*"
+                      id="banner-upload"
+                      type="file"
+                      onChange={(e) => handleFileChange(e, 'image_file')}
+                      style={{ display: 'none' }}
                     />
-                  </Paper>
-                )}
-              </Box>
+                    <label htmlFor="banner-upload">
+                      <Button
+                        variant="outlined"
+                        component="span"
+                        size="small"
+                        startIcon={<UploadIcon />}
+                        sx={{
+                          borderRadius: 2,
+                          textTransform: 'none',
+                          mb: 1.5,
+                          borderStyle: 'dashed',
+                          borderWidth: 2,
+                          py: 1,
+                          width: '100%',
+                          fontSize: '0.85rem'
+                        }}
+                      >
+                        Upload Banner
+                      </Button>
+                    </label>
+                    {previewImage && (
+                      <Paper sx={{ p: 1, borderRadius: 2 }}>
+                        <img
+                          src={previewImage}
+                          alt="Banner preview"
+                          style={{
+                            width: '100%',
+                            height: 80,
+                            objectFit: 'cover',
+                            borderRadius: 6
+                          }}
+                        />
+                      </Paper>
+                    )}
+                  </Box>
+                </Grid>
+              </Grid>
             </Grid>
           </Grid>
         </DialogContent>
 
         <Divider />
 
-        <DialogActions sx={{ p: 3 }}>
+        <DialogActions sx={{ p: 2.5 }}>
           <Button
             onClick={() => {
               setOpenCreateDialog(false);
               resetForm();
             }}
             variant="outlined"
-            sx={{ borderRadius: 2, px: 3 }}
+            size="small"
+            sx={{ borderRadius: 2, px: 2.5, fontSize: '0.85rem' }}
           >
             Cancel
           </Button>
           <Button
             onClick={handleCreateClub}
             variant="contained"
+            size="small"
             disabled={!newClub.name || !newClub.description || !newClub.logo_file || !newClub.image_file}
-            sx={{ borderRadius: 2, px: 3 }}
+            sx={{ borderRadius: 2, px: 2.5, fontSize: '0.85rem' }}
           >
             Create Club
           </Button>

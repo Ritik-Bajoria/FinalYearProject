@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ChevronRight, Zap, Sparkles, Calendar } from 'lucide-react';
+import './LoginPage.css';
 
 const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
@@ -51,51 +52,51 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-10 bg-gradient-to-br from-indigo-900 via-blue-900 to-yellow-400 relative overflow-hidden">
+    <div className="login-container">
       
       {/* Animated Background */}
       <div className="absolute inset-0 overflow-hidden z-0">
-        <div className="absolute top-10 left-10 w-40 h-40 bg-white/10 rounded-full blur-2xl animate-pulse"></div>
-        <div className="absolute bottom-20 right-20 w-28 h-28 bg-yellow-400/20 rounded-full blur-xl animate-bounce"></div>
-        <div className="absolute top-1/2 left-1/2 w-52 h-52 bg-blue-400/10 rounded-full blur-3xl animate-pulse -translate-x-1/2 -translate-y-1/2"></div>
+        <div className="login-bg-element-1"></div>
+        <div className="login-bg-element-2"></div>
+        <div className="login-bg-element-3"></div>
       </div>
 {/* Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-white/15 backdrop-blur-sm mb-4 relative">
-            <Calendar className="w-12 h-12 text-white" />
-            <div className="absolute -top-2 -right-2 w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-yellow-800" />
+        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+          <div className="login-header-icon">
+            <Calendar style={{ width: '3rem', height: '3rem', color: 'white' }} />
+            <div className="login-header-badge">
+              <Sparkles style={{ width: '1rem', height: '1rem', color: '#92400e' }} />
             </div>
           </div>
-          <h1 className="text-4xl font-bold text-white mb-2">Welcome Back!</h1>
-          <p className="text-blue-100 text-lg">Ready to create amazing events?</p>
+          <h1 style={{ fontSize: '2.25rem', fontWeight: 'bold', color: 'white', marginBottom: '0.5rem' }}>Welcome Back!</h1>
+          <p style={{ color: '#bfdbfe', fontSize: '1.125rem' }}>Ready to create amazing events?</p>
         </div>
       {/* Login Box */}
-      <div className="bg-white/90 backdrop-blur-2xl border border-white/30 rounded-3xl shadow-2xl p-10 w-full max-w-md relative z-10">
+      <div className="login-form-container">
         
         
 
         {/* Error */}
         {error && (
-          <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded-md text-sm flex items-center gap-2 shadow mb-5">
-            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+          <div className="login-error">
+            <div className="login-error-dot"></div>
             <span>{error}</span>
           </div>
         )}
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           <div>
-            <label htmlFor="email" className="block text-sm font-semibold mb-2 text-gray-800">Email Address</label>
-            <div className="relative">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 w-5 h-5" />
+            <label htmlFor="email" style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem', color: '#1f2937' }}>Email Address</label>
+            <div className="login-input-group">
+              <Mail className="login-input-icon" />
               <input
                 id="email"
                 type="email"
                 name="email"
                 value={formData.email}
                 onChange={handleInputChange}
-                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-900 bg-white/70 transition-all"
+                className="login-input"
                 placeholder="Enter your email"
                 required
               />
@@ -103,26 +104,27 @@ const LoginPage = () => {
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-semibold mb-2 text-gray-800">Password</label>
-            <div className="relative">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 w-5 h-5" />
+            <label htmlFor="password" style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem', color: '#1f2937' }}>Password</label>
+            <div className="login-input-group">
+              <Lock className="login-input-icon" />
               <input
                 id="password"
                 type={showPassword ? 'text' : 'password'}
                 name="password"
                 value={formData.password}
                 onChange={handleInputChange}
-                className="w-full pl-12 pr-14 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-900 bg-white/70 transition-all"
+                className="login-input"
+                style={{ paddingRight: '3.5rem' }}
                 placeholder="Enter your password"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                className="login-password-toggle"
                 aria-label="Toggle password visibility"
               >
-                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                {showPassword ? <EyeOff style={{ width: '1.25rem', height: '1.25rem' }} /> : <Eye style={{ width: '1.25rem', height: '1.25rem' }} />}
               </button>
             </div>
           </div>
@@ -130,38 +132,38 @@ const LoginPage = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-indigo-800 to-indigo-900 text-white font-semibold text-lg shadow-lg hover:scale-105 hover:shadow-xl transition-transform duration-300 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="login-submit-btn"
           >
             {loading ? (
-              <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              <div className="login-spinner"></div>
             ) : (
               <>
-                <Zap className="w-6 h-6" />
+                <Zap style={{ width: '1.5rem', height: '1.5rem' }} />
                 <span>Sign In & Create Events</span>
-                <ChevronRight className="w-5 h-5" />
+                <ChevronRight style={{ width: '1.25rem', height: '1.25rem' }} />
               </>
             )}
           </button>
         </form>
 
         {/* Footer */}
-        <div className="text-center mt-6">
+        <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
           <button
             type="button"
             onClick={() => navigate('/register')}
-            className="text-indigo-900 hover:underline text-sm font-medium transition"
+            className="login-register-link"
           >
-            New to event management? <span className="font-bold">Join our community!</span>
+            New to event management? <span style={{ fontWeight: 'bold' }}>Join our community!</span>
           </button>
         </div>
 
         
       </div>
-      <div className="text-center mt-6 text-blue-100 text-xs">
-          <p className="flex items-center justify-center gap-2">
-            <Sparkles className="w-4 h-4" />
+      <div className="login-footer">
+          <p className="login-footer-content">
+            <Sparkles style={{ width: '1rem', height: '1rem' }} />
             <span>Create • Manage • Celebrate</span>
-            <Sparkles className="w-4 h-4" />
+            <Sparkles style={{ width: '1rem', height: '1rem' }} />
           </p>
         </div>
     </div>

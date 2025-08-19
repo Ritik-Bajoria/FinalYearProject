@@ -154,22 +154,82 @@ def request_to_join_club(current_user, club_id):
     if is_user_member_of_any_club(user_id):
         return make_response(error='You are already a member of another club. Cannot join a new one.', status_code=400)
 
-    status = db.session.execute(
-        db.select(user_club_association.c.status).where(
+    # Check if an association already exists
+    existing = db.session.execute(
+        db.select(user_club_association)
+        .where(
             (user_club_association.c.user_id == user_id) &
             (user_club_association.c.club_id == club_id)
         )
-    ).scalar()
-    # print(status)
-    if status == ClubMembershipStatus.APPROVED:
-        return make_response(error='Already a member', status_code=400)
-    elif status == ClubMembershipStatus.PENDING:
-        return make_response(error='Join request already pending', status_code=400)
+    ).first()
 
-    if not club.request_to_join(current_user):
-        return make_response(error='Failed to request join', status_code=500)
+    if existing:
+        status = existing.status.value if hasattr(existing.status, "value") else existing.status
+
+        if status == ClubMembershipStatus.APPROVED.value:
+            return make_response(error='Already a member', status_code=400)
+        elif status == ClubMembershipStatus.PENDING.value:
+            return make_response(error='Join request already pending', status_code=400)
+        else:
+            # Update status back to pending
+            db.session.execute(
+                user_club_association.update()
+                .where(
+                    (user_club_association.c.user_id == user_id) &
+                    (user_club_association.c.club_id == club_id)
+                )
+                .values(status=ClubMembershipStatus.PENDING, requested_at=datetime.utcnow())
+            )
+            db.session.commit()
+            return make_response(message='Join request sent again', status_code=200)
+
+    # Insert a new pending membership
+    db.session.execute(
+        user_club_association.insert().values(
+            user_id=user_id,
+            club_id=club_id,
+            status=ClubMembershipStatus.PENDING,
+            requested_at=datetime.utcnow()
+        )
+    )
+    db.session.commit()
+
+    # Log the join request
+    try:
+        from ..utils.logging_utils import log_club_join_request
+        log_club_join_request(user_id, club_id, club.name)
+    except Exception as e:
+        print(f"Failed to log join request: {str(e)}")
+
+    # Create notification for the club leader about the join request
+    try:
+        from ..utils.notification_utils import create_and_broadcast_notification
+        from ..models.notification import NotificationType
+        from ..models.user import User
+        
+        # Get the requester's name
+        requester = User.query.get(user_id)
+        requester_name = "A user"
+        if requester:
+            if hasattr(requester, 'student') and requester.student:
+                requester_name = requester.student.full_name
+            elif hasattr(requester, 'faculty') and requester.faculty:
+                requester_name = requester.faculty.full_name
+            elif hasattr(requester, 'admin') and requester.admin:
+                requester_name = requester.admin.full_name
+        
+        create_and_broadcast_notification(
+            user_id=club.leader_id,
+            message=f"📝 {requester_name} has requested to join {club.name}. Please review their request.",
+            notification_type=NotificationType.CLUB_JOIN_REQUEST,
+            related_club_id=club_id,
+            related_user_id=user_id
+        )
+    except Exception as e:
+        print(f"Failed to create join request notification: {str(e)}")
 
     return make_response(message='Join request sent', status_code=200)
+
 
 
 @club_dashboard_api.route('/clubs/<int:club_id>/leave', methods=['POST'])

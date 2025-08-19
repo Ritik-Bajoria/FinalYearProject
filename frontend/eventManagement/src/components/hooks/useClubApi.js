@@ -4,8 +4,10 @@ const useClubApi = (userId) => {
     const [clubData, setClubData] = useState({
         club: null,
         events: [],
+        pastEvents: [],
         members: [],
         messages: [],
+        pendingRequests: [],
         loading: true,
         error: null
     });
@@ -30,8 +32,9 @@ const useClubApi = (userId) => {
                 const errorData = await response.json();
                 throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
             }
-
-            return await response.json();
+            const data = await response.json();
+            setClubData(prev => ({ ...prev, loading: false }));
+            return data;
         } catch (error) {
             setClubData(prev => ({
                 ...prev,
@@ -44,76 +47,193 @@ const useClubApi = (userId) => {
 
     const fetchClubData = async () => {
         try {
-            // Get user's club
-            const club = await apiCall(`/clubs/${userId}/club`);
+            setClubData(prev => ({ ...prev, loading: true, error: null }));
+
+            const clubs = await apiCall('/clubs/my');
+            const club = clubs.length > 0 ? clubs[0] : null;
 
             if (!club) {
                 setClubData({
                     club: null,
                     events: [],
+                    pastEvents: [],
                     members: [],
                     messages: [],
+                    pendingRequests: [],
                     loading: false,
                     error: null
                 });
                 return;
             }
 
-            // Fetch related data in parallel
-            const [events, members, messages] = await Promise.all([
-                apiCall(`/clubs/${club.club_id}/events`),
+            // Fetch all data in parallel
+            const [upcomingEvents, pastEvents, members, messages] = await Promise.all([
+                apiCall(`/clubs/${club.club_id}/events?type=upcoming`),
+                apiCall(`/clubs/${club.club_id}/events?type=past`),
                 apiCall(`/clubs/${club.club_id}/members`),
-                apiCall(`/clubs/${club.club_id}/messages`)
+                apiCall(`/clubs/${club.club_id}/initialchats`),
             ]);
+
+            // Only fetch requests if user is leader
+            let pendingRequests = [];
+            if (club.leader_id === userId) {
+                const requestsResponse = await apiCall(`/clubs/${club.club_id}/requests`);
+                pendingRequests = requestsResponse?.data || [];
+            }
 
             setClubData({
                 club,
-                events: Array.isArray(events) ? events : [],
-                members: Array.isArray(members) ? members : [],
-                messages: Array.isArray(messages) ? messages : [],
+                events: upcomingEvents?.data || [],
+                pastEvents: pastEvents?.data || [],
+                members: members?.data || [],
+                messages: messages?.data || [],
+                pendingRequests,
                 loading: false,
                 error: null
             });
         } catch (error) {
-            // error already handled in apiCall
+            setClubData(prev => ({
+                ...prev,
+                loading: false,
+                error: error.message || 'Failed to fetch club data'
+            }));
         }
     };
 
     const sendMessage = async (clubId, messageText) => {
-        const response = await apiCall(`/clubs/${clubId}/messages`, {
+        return await apiCall(`/clubs/${clubId}/chats`, {
             method: 'POST',
-            body: JSON.stringify({
-                message_text: messageText
-            })
+            body: JSON.stringify({ message: messageText })
         });
-        await fetchClubData(); // Refresh data
-        return response;
     };
 
     const leaveClub = async (clubId) => {
-        await apiCall(`/clubs/${clubId}/members/${userId}`, {
-            method: 'DELETE'
+        await apiCall(`/clubs/${clubId}/leave`, {
+            method: 'POST'
         });
-        await fetchClubData(); // Refresh data
-        return true;
+        await fetchClubData();
     };
 
     const createEvent = async (clubId, eventData) => {
-        const response = await apiCall(`/clubs/${clubId}/events`, {
-            method: 'POST',
-            body: JSON.stringify({
-                title: eventData.title,
-                description: eventData.description,
-                event_date: eventData.event_date,
-                end_date: eventData.end_date || null,
-                venue: eventData.venue,
-                category: eventData.category,
-                visibility: eventData.visibility,
-                capacity: eventData.capacity
-            })
+        const formData = new FormData();
+
+        // Helper function to safely append non-undefined values
+        const safeAppend = (key, value) => {
+            if (value !== undefined && value !== null && value !== '') {
+                formData.append(key, value);
+            }
+        };
+
+        // Required fields - only append if they exist
+        safeAppend('title', eventData.title);
+        safeAppend('description', eventData.description);
+        safeAppend('date', eventData.date);
+        safeAppend('time', eventData.time);
+        safeAppend('venue', eventData.venue);
+        safeAppend('duration_minutes', eventData.duration_minutes);
+
+        // Optional fields
+        safeAppend('end_date', eventData.end_date);
+        safeAppend('category', eventData.category);
+        safeAppend('visibility', eventData.visibility);
+        safeAppend('target_audience', eventData.target_audience);
+        safeAppend('capacity', eventData.capacity);
+        safeAppend('estimated_budget', eventData.estimated_budget);
+        safeAppend('registration_end_date', eventData.registration_end_date);
+
+        // Boolean flags - convert to string and only append if defined
+        if (eventData.is_recurring !== undefined) {
+            formData.append('is_recurring', String(eventData.is_recurring));
+        }
+        if (eventData.is_certified !== undefined) {
+            formData.append('is_certified', String(eventData.is_certified));
+        }
+        if (eventData.qr_check_in_enabled !== undefined) {
+            formData.append('qr_check_in_enabled', String(eventData.qr_check_in_enabled));
+        }
+
+        // Image upload
+        if (eventData.image && eventData.image instanceof File) {
+            formData.append('image', eventData.image);
+        }
+
+        try {
+            // Debug: Log FormData contents
+            console.log('FormData contents:');
+            for (let [key, value] of formData.entries()) {
+                console.log(`${key}:`, value);
+            }
+
+            const response = await apiCall(`/clubs/${clubId}/events`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                    // Don't set Content-Type for FormData - let browser set it with boundary
+                },
+                body: formData
+            });
+
+            return response;
+        } catch (error) {
+            console.error('Error creating event:', error);
+            throw error;
+        }
+    };
+
+    const updateClubDetails = async (clubId, formData) => {
+        const data = new FormData();
+        Object.keys(formData).forEach(key => {
+            if (formData[key] !== undefined && formData[key] !== null) {
+                data.append(key, formData[key]);
+            }
         });
-        await fetchClubData(); // Refresh data
-        return response;
+
+        return await apiCall(`/clubs/${clubId}`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: data
+        });
+    };
+
+    const deleteClub = async (clubId) => {
+        return await apiCall(`/clubs/${clubId}`, {
+            method: 'DELETE',
+            body: JSON.stringify({ confirmation: "DELETE" })
+        });
+    };
+
+    const getPendingRequests = async (clubId) => {
+        const requests = await apiCall(`/clubs/${clubId}/requests`);
+        const pendingRequests = Array.isArray(requests['data']) ? requests['data'] : [];
+        setClubData(prev => ({ ...prev, pendingRequests }));
+        return pendingRequests;
+    };
+
+    const approveMember = async (clubId, userId) => {
+        return await apiCall(`/clubs/${clubId}/requests/${userId}/approve`, {
+            method: 'PUT'
+        });
+    };
+
+    const rejectMember = async (clubId, userId) => {
+        return await apiCall(`/clubs/${clubId}/requests/${userId}/reject`, {
+            method: 'PUT'
+        });
+    };
+
+    const removeMember = async (clubId, userId) => {
+        return await apiCall(`/clubs/${clubId}/members/${userId}`, {
+            method: 'DELETE'
+        });
+    };
+
+    const changeLeader = async (clubId, newLeaderId) => {
+        return await apiCall(`/clubs/${clubId}/leader`, {
+            method: 'PUT',
+            body: JSON.stringify({ new_leader_id: newLeaderId })
+        });
     };
 
     useEffect(() => {
@@ -125,7 +245,14 @@ const useClubApi = (userId) => {
         refetch: fetchClubData,
         sendMessage,
         leaveClub,
-        createEvent
+        createEvent,
+        updateClubDetails,
+        deleteClub,
+        getPendingRequests,
+        approveMember,
+        rejectMember,
+        removeMember,
+        changeLeader
     };
 };
 

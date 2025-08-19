@@ -11,3 +11,13 @@ class ClubChat(BaseModel):
     sent_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_admin_message = db.Column(db.Boolean, default=False)  # distinguish admin messages
 
+    # Add this relationship
+    sender = db.relationship(
+        "User",
+        foreign_keys=[sender_id],
+        lazy="joined",
+        backref=db.backref("club_chats_sent", lazy="dynamic")
+    )
+    @property
+    def sender_name(self):
+        return self.sender.full_name if self.sender else "Unknown"

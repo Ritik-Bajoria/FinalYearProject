@@ -1,17 +1,25 @@
 from flask import jsonify
-from datetime import datetime
 
-def make_response(data=None, message=None, error=None, status_code=200):
-    response = {
-        'success': error is None,
-        'timestamp': datetime.utcnow().isoformat()
+def make_response(data=None, message="Success", error=None, status_code=200):
+    """
+    Standardized response format for API endpoints
+    
+    Args:
+        data: Response data (dict, list, etc.)
+        message: Success message
+        error: Error message (if any)
+        status_code: HTTP status code
+    
+    Returns:
+        Flask response object
+    """
+    response_data = {
+        "success": error is None,
+        "message": message if error is None else error,
+        "data": data if error is None else None
     }
     
-    if data is not None:
-        response['data'] = data
-    if message:
-        response['message'] = message
     if error:
-        response['error'] = error
+        response_data["error"] = error
     
-    return jsonify(response), status_code
+    return jsonify(response_data), status_code

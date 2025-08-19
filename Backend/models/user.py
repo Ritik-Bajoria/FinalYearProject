@@ -65,3 +65,13 @@ class User(BaseModel, UserMixin):
         if approved_only:
             query = query.filter(user_club_association.c.status == ClubMembershipStatus.APPROVED.value)
         return db.session.query(query.exists()).scalar()  # returns True/False
+    
+    @property
+    def full_name(self):
+        if self.student:
+            return self.student.full_name
+        elif self.faculty:
+            return self.faculty.full_name
+        elif self.admin:
+            return self.admin.full_name
+        return "Unknown"

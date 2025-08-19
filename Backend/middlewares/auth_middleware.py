@@ -3,6 +3,18 @@ from functools import wraps
 from Backend.models.auth_token import AuthToken
 from datetime import datetime
 
+def verify_token(token):
+    """Return the user if token is valid, else None."""
+    if not token:
+        return None
+
+    stored_token = AuthToken.query.filter_by(token=token).first()
+    if not stored_token:
+        return None
+    if stored_token.expires_at < datetime.utcnow():
+        return None
+    return stored_token.user
+
 def validate_auth_header():
     """Shared validation logic for auth headers"""
     auth_header = request.headers.get('Authorization')

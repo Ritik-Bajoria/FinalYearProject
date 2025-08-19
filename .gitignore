@@ -3,3 +3,5 @@
 .env
 *.log
 myenv
+*.json
+node_modules

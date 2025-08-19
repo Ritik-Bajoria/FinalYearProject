@@ -1,15 +1,20 @@
 # ./models/notification.py
 from enum import Enum
 from .base import db, BaseModel
+from datetime import datetime
 
 class NotificationType(Enum):
+    GENERAL = 'general'
     CLUB_JOIN_REQUEST = 'club_join_request'
     CLUB_JOIN_APPROVED = 'club_join_approved'
     CLUB_JOIN_REJECTED = 'club_join_rejected'
-    EVENT_INVITATION = 'event_invitation'
+    EVENT_CREATED = 'event_created'
+    EVENT_APPROVED = 'event_approved'
+    EVENT_REJECTED = 'event_rejected'
+    EVENT_UPDATED = 'event_updated'
     EVENT_REMINDER = 'event_reminder'
+    EVENT_INVITATION = 'event_invitation'
     SYSTEM_ALERT = 'system_alert'
-    # Add more notification types as needed
 
 class Notification(BaseModel):
     __tablename__ = 'notifications'
@@ -17,12 +22,13 @@ class Notification(BaseModel):
     notification_id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id', ondelete='CASCADE'), nullable=False)
     message = db.Column(db.Text, nullable=False)
-    notification_type = db.Column(db.Enum(NotificationType), nullable=False)
+    notification_type = db.Column(db.Enum(NotificationType), nullable=False, default=NotificationType.GENERAL)
     related_club_id = db.Column(db.Integer, db.ForeignKey('clubs.club_id'))
     related_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'))
     related_event_id = db.Column(db.Integer, db.ForeignKey('events.event_id'))
-    read = db.Column(db.Boolean, default=False)
-    sent_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    is_read = db.Column(db.Boolean, default=False)
+    read_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Relationships - specify foreign_keys to avoid ambiguity
     user = db.relationship('User', foreign_keys=[user_id], backref='notifications')

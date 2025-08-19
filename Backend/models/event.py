@@ -65,7 +65,11 @@ class Event(BaseModel):
 
     @property
     def registration_count(self):
-        return self.registrations.count()
+        print(self.registrations)
+        if self.registrations is None:
+            return 0
+        return len(self.registrations)
+
 
     @property
     def attendees(self):
