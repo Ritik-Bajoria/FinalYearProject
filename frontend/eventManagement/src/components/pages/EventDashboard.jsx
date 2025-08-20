@@ -21,6 +21,7 @@ import EventDocuments from '../event/EventDocuments';
 import EventAdminDashboard from './EventAdminDashboard';
 import EventOrganizerDashboard from './EventOrganizerDashboard';
 import EventAttendeeDashboard from './EventAttendeeDashboard';
+import EventEditModal from '../event/EventEditModal';
 
 // University Blue Theme Colors
 const theme = {
@@ -38,8 +39,7 @@ const EventDashboard = () => {
     const navigate = useNavigate();
     const [updating, setUpdating] = useState(false);
     const [activeTab, setActiveTab] = useState('details');
-    const [editMode, setEditMode] = useState(false);
-    const [editData, setEditData] = useState({});
+    const [editModalOpen, setEditModalOpen] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
     const [canDelete, setCanDelete] = useState(false);
@@ -74,26 +74,11 @@ const EventDashboard = () => {
         }
     }, [eventId, getEventDetails]);
 
-    useEffect(() => {
-        if (event) {
-            setEditData({
-                title: event.title,
-                description: event.description,
-                venue: event.venue,
-                event_date: event.event_date ? new Date(event.event_date).toISOString().slice(0, 16) : '',
-                duration_minutes: event.duration_minutes,
-                target_audience: event.target_audience,
-                capacity: event.capacity,
-                tags: event.event_tags ? event.event_tags.map(tag => tag.tag_name) : []
-            });
-        }
-    }, [event]);
-
-    const handleEditSubmit = async () => {
+    const handleEditSubmit = async (formData) => {
         setUpdating(true);
         try {
-            await updateEvent(eventId, editData);
-            setEditMode(false);
+            await updateEvent(eventId, formData);
+            setEditModalOpen(false);
             showNotification('Event updated successfully', 'success');
             await getEventDetails(eventId);
         } catch (err) {
@@ -136,21 +121,6 @@ const EventDashboard = () => {
             hour: '2-digit',
             minute: '2-digit'
         });
-    };
-
-    const handleAddTag = (tag) => {
-        if (!tag.trim() || editData.tags.includes(tag)) return;
-        setEditData(prev => ({
-            ...prev,
-            tags: [...prev.tags, tag]
-        }));
-    };
-
-    const handleRemoveTag = (tagToRemove) => {
-        setEditData(prev => ({
-            ...prev,
-            tags: prev.tags.filter(tag => tag !== tagToRemove)
-        }));
     };
 
     const renderRoleSpecificContent = () => {
@@ -372,409 +342,296 @@ const EventDashboard = () => {
                                             </Typography>
                                             {(event.user_role === 'organizer' || event.user_role === 'admin') && (
                                                 <Box>
-                                                    {editMode ? (
-                                                        <>
-                                                            <Button 
-                                                                variant="outlined"
-                                                                size="small"
-                                                                onClick={() => setEditMode(false)}
-                                                                sx={{ mr: 1 }}
-                                                            >
-                                                                Cancel
-                                                            </Button>
-                                                            <Button 
-                                                                variant="contained" 
-                                                                size="small"
-                                                                onClick={handleEditSubmit}
-                                                                disabled={updating}
-                                                            >
-                                                                {updating ? <CircularProgress size={16} /> : 'Save'}
-                                                            </Button>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <Button 
-                                                                variant="outlined" 
-                                                                size="small"
-                                                                startIcon={<Edit />}
-                                                                onClick={() => setEditMode(true)}
-                                                                sx={{ mr: 1 }}
-                                                            >
-                                                                Edit
-                                                            </Button>
-                                                            {canDelete && (
-                                                                <Button 
-                                                                    variant="outlined" 
-                                                                    size="small"
-                                                                    startIcon={<Delete />}
-                                                                    onClick={() => setConfirmDelete(true)}
-                                                                    color="error"
-                                                                >
-                                                                    Delete
-                                                                </Button>
-                                                            )}
-                                                        </>
+                                                    <Button 
+                                                        variant="outlined" 
+                                                        size="small"
+                                                        startIcon={<Edit />}
+                                                        onClick={() => setEditModalOpen(true)}
+                                                        sx={{ mr: 1 }}
+                                                    >
+                                                        Edit
+                                                    </Button>
+                                                    {canDelete && (
+                                                        <Button 
+                                                            variant="outlined" 
+                                                            size="small"
+                                                            startIcon={<Delete />}
+                                                            onClick={() => setConfirmDelete(true)}
+                                                            color="error"
+                                                        >
+                                                            Delete
+                                                        </Button>
                                                     )}
                                                 </Box>
                                             )}
                                         </Box>
 
-                                        {editMode ? (
-                                            <Box sx={{ mt: 1 }}>
-                                                <TextField
-                                                    fullWidth
-                                                    label="Title"
-                                                    size="small"
-                                                    value={editData.title}
-                                                    onChange={(e) => setEditData({...editData, title: e.target.value})}
-                                                    sx={{ mb: 2 }}
-                                                />
-                                                <TextField
-                                                    fullWidth
-                                                    multiline
-                                                    rows={3}
-                                                    label="Description"
-                                                    size="small"
-                                                    value={editData.description}
-                                                    onChange={(e) => setEditData({...editData, description: e.target.value})}
-                                                    sx={{ mb: 2 }}
-                                                />
-                                                <Grid container spacing={1}>
-                                                    <Grid item xs={12} md={6}>
-                                                        <TextField
-                                                            fullWidth
-                                                            label="Venue"
-                                                            size="small"
-                                                            value={editData.venue}
-                                                            onChange={(e) => setEditData({...editData, venue: e.target.value})}
-                                                        />
-                                                    </Grid>
-                                                    <Grid item xs={6} md={3}>
-                                                        <TextField
-                                                            fullWidth
-                                                            label="Date & Time"
-                                                            type="datetime-local"
-                                                            size="small"
-                                                            value={editData.event_date}
-                                                            onChange={(e) => setEditData({...editData, event_date: e.target.value})}
-                                                            InputLabelProps={{ shrink: true }}
-                                                        />
-                                                    </Grid>
-                                                    <Grid item xs={6} md={3}>
-                                                        <TextField
-                                                            fullWidth
-                                                            label="Duration (mins)"
-                                                            type="number"
-                                                            size="small"
-                                                            value={editData.duration_minutes}
-                                                            onChange={(e) => setEditData({...editData, duration_minutes: e.target.value})}
-                                                        />
-                                                    </Grid>
-                                                    <Grid item xs={6} md={3}>
-                                                        <TextField
-                                                            fullWidth
-                                                            label="Target Audience"
-                                                            size="small"
-                                                            value={editData.target_audience}
-                                                            onChange={(e) => setEditData({...editData, target_audience: e.target.value})}
-                                                        />
-                                                    </Grid>
-                                                    <Grid item xs={6} md={3}>
-                                                        <TextField
-                                                            fullWidth
-                                                            label="Capacity"
-                                                            type="number"
-                                                            size="small"
-                                                            value={editData.capacity}
-                                                            onChange={(e) => setEditData({...editData, capacity: e.target.value})}
-                                                        />
-                                                    </Grid>
-                                                    <Grid item xs={12}>
-                                                        <TextField
-                                                            fullWidth
-                                                            label="Add Tag"
-                                                            size="small"
-                                                            onKeyPress={(e) => {
-                                                                if (e.key === 'Enter') {
-                                                                    handleAddTag(e.target.value);
-                                                                    e.target.value = '';
-                                                                }
+                                        <Box>
+                                            <Typography 
+                                                paragraph 
+                                                sx={{ 
+                                                    color: theme.text,
+                                                    fontSize: '0.9rem',
+                                                    lineHeight: 1.6,
+                                                    mb: 3
+                                                }}
+                                            >
+                                                {event.description}
+                                            </Typography>
+                                            
+                                            <Divider sx={{ 
+                                                my: 2, 
+                                                borderColor: theme.background,
+                                                borderWidth: 1
+                                            }} />
+                                            
+                                            <Grid container spacing={2}>
+                                                <Grid item xs={12} sm={6}>
+                                                    <Box sx={{ 
+                                                        p: 2, 
+                                                        height:'100%',
+                                                        backgroundColor: theme.background,
+                                                        borderRadius: 2
+                                                    }}>
+                                                        <Typography 
+                                                            variant="subtitle1" 
+                                                            sx={{ 
+                                                                color: theme.primary,
+                                                                fontWeight: 600,
+                                                                mb: 1
                                                             }}
-                                                            sx={{ mb: 1 }}
-                                                        />
-                                                        <Stack direction="row" flexWrap="wrap" gap={0.5}>
-                                                            {editData.tags?.map(tag => (
-                                                                <Chip 
-                                                                    key={tag} 
-                                                                    label={tag}
-                                                                    size="small"
-                                                                    onDelete={() => handleRemoveTag(tag)}
-                                                                    sx={{
-                                                                        borderColor: theme.secondary,
-                                                                        color: theme.secondary,
-                                                                    }}
-                                                                />
-                                                            ))}
+                                                        >
+                                                            Event Details
+                                                        </Typography>
+                                                        <Stack spacing={1.5}>
+                                                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                                                <CalendarToday sx={{ 
+                                                                    color: theme.secondary, 
+                                                                    mr: 1,
+                                                                    fontSize: '1rem'
+                                                                }} />
+                                                                <Typography variant="body2" sx={{ color: theme.text }}>
+                                                                    {formatDate(event.event_date)}
+                                                                </Typography>
+                                                            </Box>
+                                                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                                                <Schedule sx={{ 
+                                                                    color: theme.secondary, 
+                                                                    mr: 1,
+                                                                    fontSize: '1rem'
+                                                                }} />
+                                                                <Typography variant="body2" sx={{ color: theme.text }}>
+                                                                    {formatTime(event.event_date)}
+                                                                    {event.duration_minutes && ` (${event.duration_minutes} mins)`}
+                                                                </Typography>
+                                                            </Box>
+                                                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                                                <LocationOn sx={{ 
+                                                                    color: theme.secondary, 
+                                                                    mr: 1,
+                                                                    fontSize: '1rem'
+                                                                }} />
+                                                                <Typography variant="body2" sx={{ color: theme.text }}>
+                                                                    {event.venue || 'Venue not specified'}
+                                                                </Typography>
+                                                            </Box>
+                                                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                                                <People sx={{ 
+                                                                    color: theme.secondary, 
+                                                                    mr: 1,
+                                                                    fontSize: '1rem'
+                                                                }} />
+                                                                <Typography variant="body2" sx={{ color: theme.text }}>
+                                                                    {event.target_audience || 'All audiences'} • Capacity: {event.capacity || 'Unlimited'}
+                                                                </Typography>
+                                                            </Box>
+                                                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                                                <Category sx={{ 
+                                                                    color: theme.secondary, 
+                                                                    mr: 1,
+                                                                    fontSize: '1rem'
+                                                                }} />
+                                                                <Typography variant="body2" sx={{ color: theme.text }}>
+                                                                    {event.category || 'No category'}
+                                                                </Typography>
+                                                            </Box>
+                                                            {event.estimated_budget && (
+                                                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                                                    <Receipt sx={{ 
+                                                                        color: theme.secondary, 
+                                                                        mr: 1,
+                                                                        fontSize: '1rem'
+                                                                    }} />
+                                                                    <Typography variant="body2" sx={{ color: theme.text }}>
+                                                                        Budget: ${event.estimated_budget}
+                                                                    </Typography>
+                                                                </Box>
+                                                            )}
                                                         </Stack>
-                                                    </Grid>
+                                                    </Box>
                                                 </Grid>
-                                            </Box>
-                                        ) : (
-                                            <Box>
-                                                <Typography 
-                                                    paragraph 
-                                                    sx={{ 
-                                                        color: theme.text,
-                                                        fontSize: '0.9rem',
-                                                        lineHeight: 1.6,
-                                                        mb: 3
-                                                    }}
-                                                >
-                                                    {event.description}
-                                                </Typography>
+                                                <Grid item xs={12} sm={6}>
+                                                    <Box sx={{ 
+                                                        p: 2, 
+                                                        height:'100%',
+                                                        backgroundColor: theme.background,
+                                                        borderRadius: 2
+                                                    }}>
+                                                        <Typography 
+                                                            variant="subtitle1" 
+                                                            sx={{ 
+                                                                color: theme.primary,
+                                                                fontWeight: 600,
+                                                                mb: 1
+                                                            }}
+                                                        >
+                                                            Registration
+                                                        </Typography>
+                                                        <Stack spacing={1.5}>
+                                                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                                                <EventAvailable sx={{ 
+                                                                    color: theme.secondary, 
+                                                                    mr: 1,
+                                                                    fontSize: '1rem'
+                                                                }} />
+                                                                <Typography variant="body2" sx={{ color: theme.text }}>
+                                                                    {event.registration_count || 0} registered
+                                                                </Typography>
+                                                            </Box>
+                                                            {event.registration_end_date && (
+                                                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                                                    <Close sx={{ 
+                                                                        color: theme.secondary, 
+                                                                        mr: 1,
+                                                                        fontSize: '1rem'
+                                                                    }} />
+                                                                    <Typography variant="body2" sx={{ color: theme.text }}>
+                                                                        Registration closes: {formatDate(event.registration_end_date)}
+                                                                    </Typography>
+                                                                </Box>
+                                                            )}
+                                                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                                                <Group sx={{ 
+                                                                    color: theme.secondary, 
+                                                                    mr: 1,
+                                                                    fontSize: '1rem'
+                                                                }} />
+                                                                <Typography variant="body2" sx={{ color: theme.text }}>
+                                                                    Organized by: {event.creator?.full_name || 'Unknown'}
+                                                                </Typography>
+                                                            </Box>
+                                                        </Stack>
+                                                    </Box>
+                                                </Grid>
                                                 
-                                                <Divider sx={{ 
-                                                    my: 2, 
-                                                    borderColor: theme.background,
-                                                    borderWidth: 1
-                                                }} />
-                                                
-                                                <Grid container spacing={2}>
-                                                    <Grid item xs={12} sm={6}>
-                                                        <Box sx={{ 
-                                                            p: 2, 
-                                                            height:'100%',
-                                                            backgroundColor: theme.background,
-                                                            borderRadius: 2
-                                                        }}>
-                                                            <Typography 
-                                                                variant="subtitle1" 
-                                                                sx={{ 
-                                                                    color: theme.primary,
-                                                                    fontWeight: 600,
-                                                                    mb: 1
-                                                                }}
-                                                            >
-                                                                Event Details
-                                                            </Typography>
-                                                            <Stack spacing={1.5}>
-                                                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <CalendarToday sx={{ 
-                                                                        color: theme.secondary, 
-                                                                        mr: 1,
-                                                                        fontSize: '1rem'
-                                                                    }} />
-                                                                    <Typography variant="body2" sx={{ color: theme.text }}>
-                                                                        {formatDate(event.event_date)}
-                                                                    </Typography>
-                                                                </Box>
-                                                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <Schedule sx={{ 
-                                                                        color: theme.secondary, 
-                                                                        mr: 1,
-                                                                        fontSize: '1rem'
-                                                                    }} />
-                                                                    <Typography variant="body2" sx={{ color: theme.text }}>
-                                                                        {formatTime(event.event_date)}
-                                                                        {event.duration_minutes && ` (${event.duration_minutes} mins)`}
-                                                                    </Typography>
-                                                                </Box>
-                                                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <LocationOn sx={{ 
-                                                                        color: theme.secondary, 
-                                                                        mr: 1,
-                                                                        fontSize: '1rem'
-                                                                    }} />
-                                                                    <Typography variant="body2" sx={{ color: theme.text }}>
-                                                                        {event.venue || 'Venue not specified'}
-                                                                    </Typography>
-                                                                </Box>
-                                                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <People sx={{ 
-                                                                        color: theme.secondary, 
-                                                                        mr: 1,
-                                                                        fontSize: '1rem'
-                                                                    }} />
-                                                                    <Typography variant="body2" sx={{ color: theme.text }}>
-                                                                        {event.target_audience || 'All audiences'} • Capacity: {event.capacity || 'Unlimited'}
-                                                                    </Typography>
-                                                                </Box>
-                                                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <Category sx={{ 
-                                                                        color: theme.secondary, 
-                                                                        mr: 1,
-                                                                        fontSize: '1rem'
-                                                                    }} />
-                                                                    <Typography variant="body2" sx={{ color: theme.text }}>
-                                                                        {event.category || 'No category'}
-                                                                    </Typography>
-                                                                </Box>
-                                                            </Stack>
-                                                        </Box>
-                                                    </Grid>
-                                                    <Grid item xs={12} sm={6}>
-                                                        <Box sx={{ 
-                                                            p: 2, 
-                                                            height:'100%',
-                                                            backgroundColor: theme.background,
-                                                            borderRadius: 2
-                                                        }}>
-                                                            <Typography 
-                                                                variant="subtitle1" 
-                                                                sx={{ 
-                                                                    color: theme.primary,
-                                                                    fontWeight: 600,
-                                                                    mb: 1
-                                                                }}
-                                                            >
-                                                                Registration
-                                                            </Typography>
-                                                            <Stack spacing={1.5}>
-                                                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <EventAvailable sx={{ 
-                                                                        color: theme.secondary, 
-                                                                        mr: 1,
-                                                                        fontSize: '1rem'
-                                                                    }} />
-                                                                    <Typography variant="body2" sx={{ color: theme.text }}>
-                                                                        {event.registration_count || 0} registered
-                                                                    </Typography>
-                                                                </Box>
-                                                                {event.registration_end_date && (
-                                                                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                                                        <Close sx={{ 
-                                                                            color: theme.secondary, 
+                                                {/* Organizers and Tags in Details Tab */}
+                                                <Grid item xs={12} sm={6}>
+                                                    <Box sx={{ 
+                                                        p: 2,
+                                                        height:'100%', 
+                                                        backgroundColor: theme.background,
+                                                        borderRadius: 2
+                                                    }}>
+                                                        <Typography 
+                                                            variant="subtitle1" 
+                                                            sx={{ 
+                                                                color: theme.primary,
+                                                                fontWeight: 600,
+                                                                mb: 1
+                                                            }}
+                                                        >
+                                                            Event Organizers
+                                                        </Typography>
+                                                        <List sx={{ p: 0 }}>
+                                                            {event.user_associations?.filter(u => u.role === 'organizer').slice(0, 3).map(user => (
+                                                                <ListItem key={user.user_id} sx={{ px: 0, py: 0.5 }}>
+                                                                    <Avatar 
+                                                                        sx={{ 
                                                                             mr: 1,
-                                                                            fontSize: '1rem'
-                                                                        }} />
-                                                                        <Typography variant="body2" sx={{ color: theme.text }}>
-                                                                            Registration closes: {formatDate(event.registration_end_date)}
-                                                                        </Typography>
-                                                                    </Box>
-                                                                )}
-                                                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <Group sx={{ 
-                                                                        color: theme.secondary, 
-                                                                        mr: 1,
-                                                                        fontSize: '1rem'
-                                                                    }} />
-                                                                    <Typography variant="body2" sx={{ color: theme.text }}>
-                                                                        Organized by: {event.creator?.full_name || 'Unknown'}
-                                                                    </Typography>
-                                                                </Box>
-                                                            </Stack>
-                                                        </Box>
-                                                    </Grid>
-                                                    
-                                                    {/* Organizers and Tags in Details Tab */}
-                                                    <Grid item xs={12} sm={6}>
-                                                        <Box sx={{ 
-                                                            p: 2,
-                                                            height:'100%', 
-                                                            backgroundColor: theme.background,
-                                                            borderRadius: 2
-                                                        }}>
-                                                            <Typography 
-                                                                variant="subtitle1" 
-                                                                sx={{ 
-                                                                    color: theme.primary,
-                                                                    fontWeight: 600,
-                                                                    mb: 1
-                                                                }}
-                                                            >
-                                                                Event Organizers
-                                                            </Typography>
-                                                            <List sx={{ p: 0 }}>
-                                                                {event.user_associations?.filter(u => u.role === 'organizer').slice(0, 3).map(user => (
-                                                                    <ListItem key={user.user_id} sx={{ px: 0, py: 0.5 }}>
-                                                                        <Avatar 
-                                                                            sx={{ 
-                                                                                mr: 1,
-                                                                                width: 28,
-                                                                                height: 28,
-                                                                                backgroundColor: theme.secondary,
-                                                                                color: theme.surface,
-                                                                                fontSize: '0.8rem'
-                                                                            }}
-                                                                        >
-                                                                            {user.user.full_name?.charAt(0) || 'U'}
-                                                                        </Avatar>
-                                                                        <ListItemText 
-                                                                            primary={
-                                                                                <Typography variant="body2" sx={{ color: theme.text, fontWeight: 500 }}>
-                                                                                    {user.user.full_name}
-                                                                                </Typography>
-                                                                            }
-                                                                            secondary={
-                                                                                <Typography variant="caption" sx={{ color: theme.mutedText, textTransform: 'capitalize' }}>
-                                                                                    {user.role}
-                                                                                </Typography>
-                                                                            }
-                                                                        />
-                                                                    </ListItem>
-                                                                ))}
-                                                                {event.user_associations?.filter(u => u.role === 'organizer').length > 3 && (
-                                                                    <Typography variant="caption" sx={{ color: theme.mutedText, ml: 1 }}>
-                                                                        +{event.user_associations.filter(u => u.role === 'organizer').length - 3} more
-                                                                    </Typography>
-                                                                )}
-                                                            </List>
-                                                        </Box>
-                                                    </Grid>
-                                                    <Grid item xs={12} sm={6}>
-                                                        <Box sx={{ 
-                                                            p: 2, 
-                                                            height:'100%',
-                                                            backgroundColor: theme.background,
-                                                            borderRadius: 2
-                                                        }}>
-                                                            <Typography 
-                                                                variant="subtitle1" 
-                                                                sx={{ 
-                                                                    color: theme.primary,
-                                                                    fontWeight: 600,
-                                                                    mb: 1
-                                                                }}
-                                                            >
-                                                                Event Tags
-                                                            </Typography>
-                                                            <Stack direction="row" flexWrap="wrap" gap={0.5}>
-                                                                {event.event_tags?.length > 0 ? (
-                                                                    event.event_tags.slice(0, 6).map(tag => (
-                                                                        <Chip 
-                                                                            key={tag.tag_id} 
-                                                                            label={tag.tag_name}
-                                                                            size="small"
-                                                                            variant="outlined"
-                                                                            sx={{
-                                                                                borderColor: theme.secondary,
-                                                                                color: theme.secondary,
-                                                                                fontSize: '0.7rem',
-                                                                                '&:hover': {
-                                                                                    backgroundColor: 'rgba(13, 71, 161, 0.04)'
-                                                                                }
-                                                                            }}
-                                                                        />
-                                                                    ))
-                                                                ) : (
-                                                                    <Typography 
-                                                                        variant="caption" 
-                                                                        sx={{ color: theme.mutedText }}
+                                                                            width: 28,
+                                                                            height: 28,
+                                                                            backgroundColor: theme.secondary,
+                                                                            color: theme.surface,
+                                                                            fontSize: '0.8rem'
+                                                                        }}
                                                                     >
-                                                                        No tags added
-                                                                    </Typography>
-                                                                )}
-                                                                {event.event_tags?.length > 6 && (
-                                                                    <Typography variant="caption" sx={{ color: theme.mutedText }}>
-                                                                        +{event.event_tags.length - 6} more
-                                                                    </Typography>
-                                                                )}
-                                                            </Stack>
-                                                        </Box>
-                                                    </Grid>
+                                                                        {user.user.full_name?.charAt(0) || 'U'}
+                                                                    </Avatar>
+                                                                    <ListItemText 
+                                                                        primary={
+                                                                            <Typography variant="body2" sx={{ color: theme.text, fontWeight: 500 }}>
+                                                                                {user.user.full_name}
+                                                                            </Typography>
+                                                                        }
+                                                                        secondary={
+                                                                            <Typography variant="caption" sx={{ color: theme.mutedText, textTransform: 'capitalize' }}>
+                                                                                {user.role}
+                                                                            </Typography>
+                                                                        }
+                                                                    />
+                                                                </ListItem>
+                                                            ))}
+                                                            {event.user_associations?.filter(u => u.role === 'organizer').length > 3 && (
+                                                                <Typography variant="caption" sx={{ color: theme.mutedText, ml: 1 }}>
+                                                                    +{event.user_associations.filter(u => u.role === 'organizer').length - 3} more
+                                                                </Typography>
+                                                            )}
+                                                        </List>
+                                                    </Box>
                                                 </Grid>
-                                            </Box>
-                                        )}
+                                                <Grid item xs={12} sm={6}>
+                                                    <Box sx={{ 
+                                                        p: 2, 
+                                                        height:'100%',
+                                                        backgroundColor: theme.background,
+                                                        borderRadius: 2
+                                                    }}>
+                                                        <Typography 
+                                                            variant="subtitle1" 
+                                                            sx={{ 
+                                                                color: theme.primary,
+                                                                fontWeight: 600,
+                                                                mb: 1
+                                                            }}
+                                                        >
+                                                            Event Tags
+                                                        </Typography>
+                                                        <Stack direction="row" flexWrap="wrap" gap={0.5}>
+                                                            {event.event_tags?.length > 0 ? (
+                                                                event.event_tags.slice(0, 6).map(tag => (
+                                                                    <Chip 
+                                                                        key={tag.tag_id} 
+                                                                        label={tag.tag_name}
+                                                                        size="small"
+                                                                        variant="outlined"
+                                                                        sx={{
+                                                                            borderColor: theme.secondary,
+                                                                            color: theme.secondary,
+                                                                            fontSize: '0.7rem',
+                                                                            '&:hover': {
+                                                                                backgroundColor: 'rgba(13, 71, 161, 0.04)'
+                                                                            }
+                                                                        }}
+                                                                    />
+                                                                ))
+                                                            ) : (
+                                                                <Typography 
+                                                                    variant="caption" 
+                                                                    sx={{ color: theme.mutedText }}
+                                                                >
+                                                                    No tags added
+                                                                </Typography>
+                                                            )}
+                                                            {event.event_tags?.length > 6 && (
+                                                                <Typography variant="caption" sx={{ color: theme.mutedText }}>
+                                                                    +{event.event_tags.length - 6} more
+                                                                </Typography>
+                                                            )}
+                                                        </Stack>
+                                                    </Box>
+                                                </Grid>
+                                            </Grid>
+                                        </Box>
                                     </Box>
                                 )}
 
@@ -853,6 +710,15 @@ const EventDashboard = () => {
                 </Grid>
             </Container>
 
+            {/* Event Edit Modal */}
+            <EventEditModal
+                open={editModalOpen}
+                onClose={() => setEditModalOpen(false)}
+                event={event}
+                onSave={handleEditSubmit}
+                loading={updating}
+            />
+
             {/* Delete Confirmation Dialog */}
             <Dialog 
                 open={confirmDelete} 
@@ -924,8 +790,8 @@ const EventDashboard = () => {
                                 backgroundColor: '#d32f2f'
                             },
                             '&:disabled': {
-                                backgroundColor: '#f5f5f5',
-                                color: '#bdbdbd'
+                                backgroundColor: 'rgba(244, 67, 54, 0.1)',
+                                color: 'rgba(244, 67, 54, 0.5)'
                             }
                         }}
                     >

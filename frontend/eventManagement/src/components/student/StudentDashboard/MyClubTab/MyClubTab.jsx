@@ -197,6 +197,7 @@ const MyClubTab = ({ user }) => {
                     updateClubDetails={updateClubDetails}
                     deleteClub={deleteClub}
                     leaveClub={leaveClub}
+                    currentUser={user}
                 />
             )}
         </Box>

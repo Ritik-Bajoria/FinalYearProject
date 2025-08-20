@@ -19,6 +19,17 @@ const ClubDetailsTab = ({ club, members, isLeader, showNotification, refetch, up
         }
     };
 
+    const handleUpdateClubDetails = (formData) => {
+        console.log('Received FormData from child:');
+        for (let [key, value] of formData.entries()) {
+            console.log(key, value);
+        }
+
+        // Call your existing update function
+        updateClubDetails(club.club_id, formData);
+        refetch();
+    };
+
     return (
         <Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -112,9 +123,9 @@ const ClubDetailsTab = ({ club, members, isLeader, showNotification, refetch, up
             <ClubDetailsForm
                 open={openDetailsForm}
                 onClose={() => setOpenDetailsForm(false)}
-                onSubmit={updateClubDetails}
+                onSubmit={handleUpdateClubDetails}
                 club={club}
-            />
+                />
 
             <Dialog
                 open={deleteConfirmOpen}

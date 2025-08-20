@@ -181,20 +181,39 @@ const useClubApi = (userId) => {
     };
 
     const updateClubDetails = async (clubId, formData) => {
-        const data = new FormData();
-        Object.keys(formData).forEach(key => {
-            if (formData[key] !== undefined && formData[key] !== null) {
-                data.append(key, formData[key]);
+        try{
+        const dataToUpdate = new FormData();
+        // console.log('Received FormData from child:');
+        // for (let [key, value] of formData.entries()) {
+        //     console.log(key, value);
+        // }
+        // Safely iterate through formData properties
+        for (let [key, value] of formData.entries()) {
+            if (value instanceof File) {
+                // For files, append with the file object
+                dataToUpdate.append(key, value);
+            } else if (Array.isArray(value)) {
+                // For arrays, append each item individually
+                value.forEach(item => {
+                    dataToUpdate.append(key, item);
+                });
+            } else {
+                // For other values, append as-is (FormData will convert to string)
+                dataToUpdate.append(key, value);
             }
-        });
-
+        }
+        console.log(dataToUpdate)
         return await apiCall(`/clubs/${clubId}`, {
             method: 'PUT',
             headers: {
                 'Authorization': `Bearer ${token}`
             },
-            body: data
+            body: dataToUpdate
         });
+    }catch (error){
+                console.error('Error in updateClubDetails:', error);
+        throw error;
+    }
     };
 
     const deleteClub = async (clubId) => {

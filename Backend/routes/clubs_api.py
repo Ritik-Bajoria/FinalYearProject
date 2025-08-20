@@ -16,13 +16,7 @@ my_club_api = Blueprint('my_club_api', __name__)
 
 # Configuration
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
-DEFAULT_UPLOAD_FOLDER = "uploads"
-
-def get_upload_folder():
-    base = current_app.config.get("UPLOAD_FOLDER", DEFAULT_UPLOAD_FOLDER)
-    path = os.path.join(base, "clubs")
-    os.makedirs(path, exist_ok=True)
-    return path
+# UPLOAD_FOLDER = 'static/uploads/clubs'
 
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -184,12 +178,14 @@ def create_club_event(current_user, club_id):
     if image_file and image_file.filename:
         if not allowed_file(image_file.filename):
             return make_response(error="Invalid image file type", status_code=400)
-        upload_folder = get_upload_folder()
+        upload_folder='static/uploads/events'
+        abs_upload_dir = os.path.join(current_app.root_path, upload_folder)
+        os.makedirs(abs_upload_dir, exist_ok=True)
         fname = secure_filename(f"event_{int(datetime.utcnow().timestamp())}_{image_file.filename}")
         save_path = os.path.join(upload_folder, fname)
         image_file.save(save_path)
         # store relative path for serving via static route
-        image_path = os.path.join('clubs', fname).replace('\\', '/')
+        image_path = os.path.join(upload_folder, fname).replace('\\', '/')
 
     # Create Event object
     event = Event(
@@ -203,7 +199,7 @@ def create_club_event(current_user, club_id):
         image_url=image_path,
         club_id=club_id,
         created_by=current_user.user_id,
-        approval_status='approved',
+        approval_status='pending',
         event_status='upcoming'
     )
     db.session.add(event)
@@ -575,61 +571,78 @@ def get_club_details(current_user, club_id):
 @my_club_api.route('/clubs/<int:club_id>', methods=['PUT'])
 @token_required
 def update_club_details(current_user, club_id):
-    """
-    Leader can update club fields and upload logo/image via multipart/form-data.
-    """
-    club = Club.query.get_or_404(club_id)
-    if not is_club_leader(current_user.user_id, club):
-        return make_response(error="Only leader can update club details", status_code=403)
+    try:
+        # Debug info
+        print("=== REQUEST DEBUG ===")
+        print("Form data:", request.form.to_dict())
+        print("Files:", {key: file.filename for key, file in request.files.items()})
+        print("=====================")
+        
+        club = Club.query.get_or_404(club_id)
+        if not is_club_leader(current_user.user_id, club):
+            return make_response(error="Only leader can update club details", status_code=403)
 
-    # text updates (from form)
-    name = request.form.get('name')
-    description = request.form.get('description')
-    category = request.form.get('category')
-    club_details = request.form.get('club_details')
-    established_str = request.form.get('established_date')
+        # Process text fields
+        text_fields = ['name', 'description', 'category', 'club_details', 'established_date']
+        updates = {}
+        
+        for field in text_fields:
+            value = request.form.get(field)
+            if value is not None:
+                updates[field] = value
+                print(f"Setting {field} to: {value}")
 
-    if name:
-        # ensure unique name
-        existing = Club.query.filter(Club.name == name, Club.club_id != club_id).first()
-        if existing:
-            return make_response(error="Club name already in use", status_code=400)
-        club.name = name
-    if description is not None:
-        club.description = description
-    if category is not None:
-        club.category = category
-    if club_details is not None:
-        club.club_details = club_details
-    if established_str:
-        try:
-            club.established_date = datetime.fromisoformat(established_str).date()
-        except Exception:
-            return make_response(error="Invalid established_date format", status_code=400)
+        # Handle name uniqueness check
+        if 'name' in updates and updates['name'] != club.name:
+            existing = Club.query.filter(Club.name == updates['name'], Club.club_id != club_id).first()
+            if existing:
+                return make_response(error="Club name already in use", status_code=400)
+            club.name = updates['name']
 
-    # files
-    upload_folder = get_upload_folder()
-    logo_file = request.files.get('logo_url')
-    image_file = request.files.get('image_url')
+        # Update other fields
+        if 'description' in updates:
+            club.description = updates['description']
+        if 'category' in updates:
+            club.category = updates['category']
+        if 'club_details' in updates:
+            club.club_details = updates['club_details']
+        if 'established_date' in updates:
+            try:
+                club.established_date = datetime.fromisoformat(updates['established_date']).date()
+            except ValueError:
+                return make_response(error="Invalid established_date format", status_code=400)
 
-    if logo_file and logo_file.filename:
-        if not allowed_file(logo_file.filename):
-            return make_response(error="Invalid logo file type", status_code=400)
-        fname = secure_filename(f"logo_{int(datetime.utcnow().timestamp())}_{logo_file.filename}")
-        save_path = os.path.join(upload_folder, fname)
-        logo_file.save(save_path)
-        club.logo_url = os.path.join('clubs', fname).replace('\\', '/')
+        # Process files - FIXED PATH HANDLING
+        upload_folder = 'static/uploads/clubs'
+        abs_upload_dir = os.path.join(current_app.root_path, upload_folder)
+        os.makedirs(abs_upload_dir, exist_ok=True)
+        
+        for file_key in ['logo_url', 'image_url']:
+            file = request.files.get(file_key)
+            if file and file.filename:
+                print(f"Processing {file_key}: {file.filename}")
+                if not allowed_file(file.filename):
+                    return make_response(error=f"Invalid {file_key} file type", status_code=400)
+                
+                fname = secure_filename(f"{file_key}_{int(datetime.utcnow().timestamp())}_{file.filename}")
+                # Use ABSOLUTE path for saving
+                abs_save_path = os.path.join(abs_upload_dir, fname)
+                file.save(abs_save_path)
+                print(f"File saved to: {abs_save_path}")
+                
+                # Set the appropriate attribute with RELATIVE path for database
+                relative_path = os.path.join(upload_folder, fname).replace('\\', '/')
+                setattr(club, file_key, relative_path)
 
-    if image_file and image_file.filename:
-        if not allowed_file(image_file.filename):
-            return make_response(error="Invalid image file type", status_code=400)
-        fname = secure_filename(f"image_{int(datetime.utcnow().timestamp())}_{image_file.filename}")
-        save_path = os.path.join(upload_folder, fname)
-        image_file.save(save_path)
-        club.image_url = os.path.join('clubs', fname).replace('\\', '/')
-
-    db.session.commit()
-    return make_response(message="Club updated", status_code=200)
+        db.session.commit()
+        return make_response(message="Club updated successfully", status_code=200)
+        
+    except Exception as e:
+        print(f"Error in update_club_details: {str(e)}")
+        import traceback
+        traceback.print_exc()  # This will show the full traceback
+        db.session.rollback()
+        return make_response(error="Internal server error", status_code=500)
 
 @my_club_api.route('/clubs/<int:club_id>', methods=['DELETE'])
 @token_required

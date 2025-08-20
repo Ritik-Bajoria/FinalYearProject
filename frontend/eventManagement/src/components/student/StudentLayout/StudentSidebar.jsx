@@ -61,6 +61,7 @@ const StudentSidebar = ({ activeTab, setActiveTab, user }) => {
       sx={{
         width: 240,
         flexShrink: 0,
+        height:'100vh',
         [`& .MuiDrawer-paper`]: {
           width: 240,
           boxSizing: 'border-box',

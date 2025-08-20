@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+// components/EventChat.js
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
     Box,
     Paper,
@@ -13,25 +14,29 @@ import {
     Tabs,
     Tab,
     Alert,
-    CircularProgress
+    CircularProgress,
+    IconButton,
+    Menu,
+    MenuItem
 } from '@mui/material';
 import {
     Send as SendIcon,
     Chat as ChatIcon,
     AdminPanelSettings as AdminIcon,
     VolunteerActivism as VolunteerIcon,
-    People as PeopleIcon
+    People as PeopleIcon,
+    MoreVert as MoreIcon,
+    Reply as ReplyIcon,
+    CopyAll as CopyIcon,
+    PushPin as PinIcon
 } from '@mui/icons-material';
-import useEventApi from '../hooks/useEventApi';
+import useEventChat from '../hooks/useEventChat';
 
-const EventChat = ({ eventId, userRole, eventStatus, showNotification }) => {
-    const [activeChat, setActiveChat] = useState('');
-    const [messages, setMessages] = useState([]);
-    const [newMessage, setNewMessage] = useState('');
-    const [loading, setLoading] = useState(false);
+const EventChat = ({ eventId, userRole, eventStatus, showNotification, currentUser }) => {
+    // const [activeChat, setActiveChat] = useState('');
+    const [anchorEl, setAnchorEl] = useState(null);
+    const [selectedMessage, setSelectedMessage] = useState(null);
     const messagesEndRef = useRef(null);
-    
-    const { getEventChats, sendEventMessage } = useEventApi();
 
     // Determine available chat types based on user role
     const getAvailableChats = () => {
@@ -54,56 +59,48 @@ const EventChat = ({ eventId, userRole, eventStatus, showNotification }) => {
         
         return chats;
     };
-
     const availableChats = getAvailableChats();
 
-    useEffect(() => {
-        if (availableChats.length > 0 && !activeChat) {
-            setActiveChat(availableChats[0].type);
-        }
-    }, [availableChats]);
+    const [activeChat, setActiveChat] = useState(
+    availableChats.length > 0 ? availableChats[0].type : ''
+    );
 
-    useEffect(() => {
-        if (activeChat) {
-            fetchMessages();
-        }
-    }, [activeChat]);
+    // const availableChats = getAvailableChats();
+
+    // Use the event chat hook
+    const {
+        messages,
+        newMessage,
+        setNewMessage,
+        replyTo,
+        setReplyTo,
+        handleSendMessage,
+        loading,
+        isConnected,
+        typingUsers,
+        isSending,
+        error
+    } = useEventChat(eventId, activeChat, currentUser);
+    
+
+    // useEffect(() => {
+    //     if (availableChats.length > 0 && !activeChat) {
+    //         setActiveChat(availableChats[0].type);
+    //     }
+    // }, [availableChats]);
 
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
 
-    const fetchMessages = async () => {
-        if (!activeChat) return;
-        
-        setLoading(true);
-        try {
-            const chatMessages = await getEventChats(eventId, activeChat);
-            setMessages(chatMessages);
-        } catch (error) {
-            showNotification('Failed to load messages', 'error');
-        } finally {
-            setLoading(false);
+    useEffect(() => {
+        if (error) {
+            showNotification(error, 'error');
         }
-    };
+    }, [error, showNotification]);
 
-    const handleSendMessage = async () => {
-        if (!newMessage.trim() || !activeChat) return;
-
-        // Check if event has ended
-        if (eventStatus === 'completed') {
-            showNotification('Chat is disabled for completed events', 'warning');
-            return;
-        }
-
-        try {
-            await sendEventMessage(eventId, activeChat, newMessage.trim());
-            setNewMessage('');
-            fetchMessages(); // Refresh messages
-            showNotification('Message sent successfully', 'success');
-        } catch (error) {
-            showNotification('Failed to send message', 'error');
-        }
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
     const handleKeyPress = (e) => {
@@ -113,9 +110,26 @@ const EventChat = ({ eventId, userRole, eventStatus, showNotification }) => {
         }
     };
 
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    };
+    // const handleSendMessage = async () => {
+    //     const success = await sendMessage();
+    //     if (success) {
+    //         showNotification('Message sent successfully', 'success');
+    //     } else {
+    //         showNotification('Failed to send message', 'error');
+    //     }
+    // };
+//       const handleSendMessage = useCallback(async () => {
+//         console.log('Sending message:', newMessage, 'Reply to:', replyTo);
+//     if (!newMessage.trim()) return;
+    
+//     const success = await sendMessage(newMessage, replyTo?.id);
+//     if (success) {
+//       setNewMessage('');
+//       setReplyTo(null);
+//       handleTyping(false);
+//     }
+//     return success;
+//   }, [newMessage, replyTo, sendMessage, handleTyping]);
 
     const formatTimestamp = (timestamp) => {
         const date = new Date(timestamp);
@@ -129,6 +143,24 @@ const EventChat = ({ eventId, userRole, eventStatus, showNotification }) => {
         }
     };
 
+    const handleMessageAction = (message, action) => {
+        switch (action) {
+            case 'reply':
+                setReplyTo(message);
+                break;
+            case 'copy':
+                navigator.clipboard.writeText(message.message);
+                showNotification('Message copied to clipboard', 'success');
+                break;
+            case 'pin':
+                showNotification('Message pinned', 'info');
+                break;
+            default:
+                break;
+        }
+        setAnchorEl(null);
+    };
+
     if (availableChats.length === 0) {
         return (
             <Alert severity="info">
@@ -136,6 +168,8 @@ const EventChat = ({ eventId, userRole, eventStatus, showNotification }) => {
             </Alert>
         );
     }
+
+    const isOthersTyping = typingUsers.length > 0;
 
     return (
         <Box sx={{ height: '600px', display: 'flex', flexDirection: 'column' }}>
@@ -158,10 +192,52 @@ const EventChat = ({ eventId, userRole, eventStatus, showNotification }) => {
                 </Tabs>
             )}
 
+            {/* Connection Status */}
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <Box
+                    sx={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        backgroundColor: isConnected ? 'success.main' : 'error.main',
+                        mr: 1
+                    }}
+                />
+                <Typography variant="caption" color="text.secondary">
+                    {isConnected ? 'Connected' : 'Disconnected'} • {messages.length} messages
+                </Typography>
+            </Box>
+
             {/* Event Status Alert */}
             {eventStatus === 'completed' && (
                 <Alert severity="warning" sx={{ mb: 2 }}>
                     This event has ended. Chat is now view-only.
+                </Alert>
+            )}
+
+            {/* Reply Banner */}
+            {replyTo && (
+                <Alert 
+                    severity="info" 
+                    sx={{ mb: 2 }}
+                    action={
+                        <IconButton
+                            size="small"
+                            onClick={() => setReplyTo(null)}
+                        >
+                            <ReplyIcon fontSize="small" />
+                        </IconButton>
+                    }
+                >
+                    <Typography variant="body2">
+                        Replying to {replyTo.sender_name}
+                    </Typography>
+                    <Typography variant="caption" sx={{ fontStyle: 'italic' }}>
+                        {replyTo.message.length > 50 
+                            ? `${replyTo.message.substring(0, 50)}...` 
+                            : replyTo.message
+                        }
+                    </Typography>
                 </Alert>
             )}
 
@@ -181,7 +257,8 @@ const EventChat = ({ eventId, userRole, eventStatus, showNotification }) => {
                         flex: 1,
                         overflow: 'auto',
                         p: 2,
-                        backgroundColor: '#f8f9fa'
+                        backgroundColor: '#f8f9fa',
+                        position: 'relative'
                     }}
                 >
                     {loading ? (
@@ -202,12 +279,13 @@ const EventChat = ({ eventId, userRole, eventStatus, showNotification }) => {
                         <List sx={{ p: 0 }}>
                             {messages.map((message) => (
                                 <ListItem
-                                    key={message.message_id}
+                                    key={message.id || message.message_id}
                                     sx={{
                                         flexDirection: 'column',
                                         alignItems: 'flex-start',
                                         mb: 2,
-                                        p: 0
+                                        p: 0,
+                                        position: 'relative'
                                     }}
                                 >
                                     <Box
@@ -224,10 +302,50 @@ const EventChat = ({ eventId, userRole, eventStatus, showNotification }) => {
                                         <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
                                             {message.sender_name}
                                         </Typography>
+                                        {message.sender_id === currentUser?.user_id && (
+                                            <Chip
+                                                label="You"
+                                                size="small"
+                                                sx={{ ml: 1, height: 20 }}
+                                            />
+                                        )}
                                         <Typography variant="caption" sx={{ ml: 'auto', color: 'text.secondary' }}>
-                                            {formatTimestamp(message.timestamp)}
+                                            {formatTimestamp(message.timestamp || message.sent_at)}
                                         </Typography>
+                                        <IconButton
+                                            size="small"
+                                            onClick={(e) => {
+                                                setAnchorEl(e.currentTarget);
+                                                setSelectedMessage(message);
+                                            }}
+                                            sx={{ ml: 1 }}
+                                        >
+                                            <MoreIcon fontSize="small" />
+                                        </IconButton>
                                     </Box>
+                                    
+                                    {/* Reply context */}
+                                    {message.reply_to_message && (
+                                        <Box
+                                            sx={{
+                                                ml: 5,
+                                                mb: 1,
+                                                p: 1,
+                                                backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                                                borderRadius: 1,
+                                                borderLeft: '3px solid',
+                                                borderColor: 'primary.main'
+                                            }}
+                                        >
+                                            <Typography variant="caption" sx={{ fontWeight: 600, display: 'block' }}>
+                                                {message.reply_to_message.sender_name}
+                                            </Typography>
+                                            <Typography variant="caption" sx={{ fontStyle: 'italic' }}>
+                                                {message.reply_to_message.message}
+                                            </Typography>
+                                        </Box>
+                                    )}
+                                    
                                     <Paper
                                         sx={{
                                             p: 2,
@@ -236,17 +354,60 @@ const EventChat = ({ eventId, userRole, eventStatus, showNotification }) => {
                                             border: 1,
                                             borderColor: 'divider',
                                             borderRadius: 2,
-                                            maxWidth: 'calc(100% - 40px)'
+                                            maxWidth: 'calc(100% - 40px)',
+                                            position: 'relative'
                                         }}
                                     >
                                         <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                                            {message.message}
+                                            {message.message || message.message_text}
                                         </Typography>
                                     </Paper>
                                 </ListItem>
                             ))}
                             <div ref={messagesEndRef} />
                         </List>
+                    )}
+
+                    {/* Typing Indicator */}
+                    {isOthersTyping && (
+                        <Box
+                            sx={{
+                                position: 'absolute',
+                                bottom: 8,
+                                left: 16,
+                                display: 'flex',
+                                alignItems: 'center',
+                                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                                px: 2,
+                                py: 1,
+                                borderRadius: 2,
+                                boxShadow: 1
+                            }}
+                        >
+                            <Box sx={{ display: 'flex', mr: 1 }}>
+                                {[0, 1, 2].map((i) => (
+                                    <Box
+                                        key={i}
+                                        sx={{
+                                            width: 4,
+                                            height: 4,
+                                            borderRadius: '50%',
+                                            backgroundColor: 'text.secondary',
+                                            mx: 0.5,
+                                            animation: 'pulse 1.5s infinite',
+                                            animationDelay: `${i * 0.2}s`,
+                                            '@keyframes pulse': {
+                                                '0%, 100%': { opacity: 0.4 },
+                                                '50%': { opacity: 1 }
+                                            }
+                                        }}
+                                    />
+                                ))}
+                            </Box>
+                            <Typography variant="caption" color="text.secondary">
+                                {typingUsers.length === 1 ? 'Someone is typing...' : `${typingUsers.length} people are typing...`}
+                            </Typography>
+                        </Box>
                     )}
                 </Box>
 
@@ -261,17 +422,18 @@ const EventChat = ({ eventId, userRole, eventStatus, showNotification }) => {
                                 value={newMessage}
                                 onChange={(e) => setNewMessage(e.target.value)}
                                 onKeyPress={handleKeyPress}
-                                placeholder="Type your message..."
+                                placeholder={replyTo ? `Reply to ${replyTo.sender_name}...` : "Type your message..."}
+                                disabled={isSending}
                                 variant="outlined"
                                 size="small"
                             />
                             <Button
                                 variant="contained"
                                 onClick={handleSendMessage}
-                                disabled={!newMessage.trim()}
+                                disabled={!newMessage.trim() || isSending}
                                 sx={{ minWidth: 'auto', px: 2 }}
                             >
-                                <SendIcon />
+                                {isSending ? <CircularProgress size={20} /> : <SendIcon />}
                             </Button>
                         </Box>
                         <Typography variant="caption" sx={{ color: 'text.secondary', mt: 1, display: 'block' }}>
@@ -280,6 +442,23 @@ const EventChat = ({ eventId, userRole, eventStatus, showNotification }) => {
                     </Box>
                 )}
             </Paper>
+
+            {/* Message Actions Menu */}
+            <Menu
+                anchorEl={anchorEl}
+                open={Boolean(anchorEl)}
+                onClose={() => setAnchorEl(null)}
+            >
+                <MenuItem onClick={() => handleMessageAction(selectedMessage, 'reply')}>
+                    <ReplyIcon sx={{ mr: 1 }} fontSize="small" /> Reply
+                </MenuItem>
+                <MenuItem onClick={() => handleMessageAction(selectedMessage, 'copy')}>
+                    <CopyIcon sx={{ mr: 1 }} fontSize="small" /> Copy
+                </MenuItem>
+                <MenuItem onClick={() => handleMessageAction(selectedMessage, 'pin')}>
+                    <PinIcon sx={{ mr: 1 }} fontSize="small" /> Pin
+                </MenuItem>
+            </Menu>
         </Box>
     );
 };

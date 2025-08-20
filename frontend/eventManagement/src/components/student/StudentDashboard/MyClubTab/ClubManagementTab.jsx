@@ -76,6 +76,7 @@ const ClubManagementTab = ({
                 await rejectMember(club.club_id, userId);
                 showNotification('Request rejected', 'success');
             }
+              await refetch();
             pendingRequests = await getPendingRequests(club.club_id);
         } catch (error) {
             showNotification(error.message || 'Action failed', 'error');

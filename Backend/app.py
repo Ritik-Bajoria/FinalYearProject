@@ -1,12 +1,13 @@
 from flask import request, jsonify
 # Import the create_app function and db from package
 from Backend import create_app, db
+from Backend.models import User, EventChat
 from flask_cors import CORS, cross_origin
 from Backend.logger import Logger
 import signal
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 import sys
 import os
 from dotenv import load_dotenv
@@ -18,7 +19,7 @@ load_dotenv()
 
 # Initialize Flask app
 app = create_app()
-
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024 
 # Initialize extensions
 # db.init_app(app)
 login_manager = LoginManager(app)
@@ -29,11 +30,11 @@ socketio = SocketIO(app,
                    engineio_logger=True)
 @socketio.on('connect')
 def handle_connect():
-    logger.info(f"Client connected: {request.sid}")
+    logger.info(f"Client connected for club chat: {request.sid}")
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    logger.info(f"Client disconnected: {request.sid}")
+    logger.info(f"Client disconnected for club chat: {request.sid}")
 # Setup Flask-Login
 @login_manager.user_loader
 def load_user(user_id):
@@ -62,19 +63,21 @@ def check_db_connection():
 # Store typing status and active users
 active_users = {}
 typing_status = {}
+event_chat_typing = {}
+active_users = {}
 
-@socketio.on('connect')
-def handle_connect():
-    logger.info(f"Client connected: {request.sid}")
+# @socketio.on('connect')
+# def handle_connect():
+#     logger.info(f"Client connected for club chat: {request.sid}")
 
-@socketio.on('disconnect')
-def handle_disconnect():
-    user_id = active_users.get(request.sid)
-    if user_id:
-        logger.info(f"User {user_id} disconnected")
-        del active_users[request.sid]
-    else:
-        logger.info(f"Unknown client disconnected: {request.sid}")
+# @socketio.on('disconnect')
+# def handle_disconnect():
+#     user_id = active_users.get(request.sid)
+#     if user_id:
+#         logger.info(f"User {user_id} disconnected")
+#         del active_users[request.sid]
+#     else:
+#         logger.info(f"Unknown client disconnected: {request.sid}")
 
 @socketio.on('authenticate')
 def handle_authentication(data):
@@ -162,6 +165,177 @@ def handle_typing(data):
             emit('userTyping', {'isTyping': False}, room=room)
     except Exception as e:
         logger.error(f"Error in typing: {str(e)}")
+
+@socketio.on('join_event_chat')
+def handle_join_event_chat(data):
+    try:
+        logger.info("event chat is joined")
+        if request.sid not in active_users:
+            emit('error', {'message': 'Not authenticated'})
+            return
+
+        event_id = data.get('event_id')
+        chat_type = data.get('chat_type')
+        if not event_id or not chat_type:
+            emit('error', {'message': 'Event ID and chat type required'})
+            return
+
+        room = f"event_{event_id}_{chat_type}"
+        join_room(room)
+
+        if room not in event_chat_typing:
+            event_chat_typing[room] = {}
+
+        emit('joined_chat', {
+            'room': room,
+            'message': f'Joined {chat_type} chat for event {event_id}'
+        })
+    except Exception as e:
+        emit('error', {'message': str(e)})
+
+@socketio.on('send_event_message')
+def handle_send_event_message(data, callback=None):
+    """Emit an ack to the client as callback"""
+    # logger.info("message is bbeing sent", active_users[request.sid])
+    try:
+        # if request.sid not in active_users:
+        #     if callback: callback({'error': 'Not authenticated'})
+        #     return
+        print("my data is \n",data)
+        user_id = active_users[request.sid]
+        event_id = data.get('event_id')
+        chat_type = data.get('chat_type')
+        message_text = data.get('message')
+
+        if not all([event_id, chat_type, message_text]):
+            if callback: callback({'error': 'Missing required fields'})
+            return
+        if not verify_chat_access(user_id, event_id, chat_type):
+            if callback: callback({'error': 'Access denied'})
+            return
+        
+        timestamp=datetime.utcnow().isoformat()
+        print(timestamp)
+        
+        try:
+            chat_message = EventChat(
+                event_id=event_id,
+                sender_id=user_id,
+                message=message_text,
+                chat_type=chat_type,
+                timestamp=timestamp
+            )
+            print(chat_message)
+            logger.info("message is set to send")
+            db.session.add(chat_message)
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()  # Undo the failed transaction
+            logger.error(f"Failed to save chat message: {str(e)}")
+            if callback:
+                callback({'error': 'Failed to save message'})
+            return
+
+        logger.info("message is sent")
+
+        sender = User.query.get(user_id)
+        message_data = {
+            'id': chat_message.id,
+            'event_id': chat_message.event_id,
+            'sender_id': chat_message.sender_id,
+            'sender_name': sender.full_name if sender else "Unknown",
+            'message': chat_message.message,
+            'chat_type': chat_message.chat_type,
+            'timestamp': chat_message.timestamp.isoformat()
+        }
+
+        # if chat_message.reply_to_id:
+        #     reply_message = EventChat.query.get(chat_message.reply_to_id)
+        #     if reply_message:
+        #         reply_sender = User.query.get(reply_message.sender_id)
+        #         message_data['reply_to_message'] = {
+        #             'id': reply_message.id,
+        #             'sender_name': reply_sender.full_name if reply_sender else "Unknown",
+        #             'message': reply_message.message
+        #         }
+
+        room = f"event_{event_id}_{chat_type}"
+        emit('new_event_message', message_data, room=room)
+
+        # Clear typing
+        if room in event_chat_typing and user_id in event_chat_typing[room]:
+            del event_chat_typing[room][user_id]
+            emit_typing_status(room)
+
+        if callback: callback(message_data)  # ✅ send ack
+    except Exception as e:
+        db.session.rollback()
+        if callback: callback({'error': str(e)})
+
+@socketio.on('typing_event')
+def handle_typing_event(data):
+    try:
+        if request.sid not in active_users:
+            return
+
+        user_id = active_users[request.sid]
+        event_id = data.get('event_id')
+        chat_type = data.get('chat_type')
+        is_typing = data.get('is_typing', False)
+
+        if not event_id or not chat_type:
+            return
+
+        room = f"event_{event_id}_{chat_type}"
+        if room not in event_chat_typing:
+            event_chat_typing[room] = {}
+
+        if is_typing:
+            event_chat_typing[room][user_id] = datetime.utcnow()
+        elif user_id in event_chat_typing[room]:
+            del event_chat_typing[room][user_id]
+
+        emit_typing_status(room)
+    except Exception as e:
+        print(f"Error handling typing event: {str(e)}")
+
+def emit_typing_status(room):
+    try:
+        if room in event_chat_typing:
+            current_time = datetime.utcnow()
+            for user_id, last_typed in list(event_chat_typing[room].items()):
+                if (current_time - last_typed).total_seconds() > 5:
+                    del event_chat_typing[room][user_id]
+
+            if event_chat_typing[room]:
+                typing_users = list(event_chat_typing[room].keys())
+                emit('user_typing_event', {'users': typing_users, 'is_typing': True}, room=room)
+            else:
+                emit('user_typing_event', {'is_typing': False}, room=room)
+    except Exception as e:
+        print(f"Error emitting typing status: {str(e)}")
+
+def verify_chat_access(user_id, event_id, chat_type):
+    from .models.user_event_association import UserEventAssociation
+
+    user_association = UserEventAssociation.query.filter_by(
+        user_id=user_id,
+        event_id=event_id
+    ).first()
+
+    if not user_association:
+        return False
+
+    user_role = user_association.role
+
+    if chat_type == 'organizer_admin':
+        return user_role == 'organizer'
+    elif chat_type == 'organizer_volunteer':
+        return user_role in ['organizer', 'volunteer']
+    elif chat_type == 'attendee_only':
+        return user_role in ['organizer', 'volunteer', 'attendee']
+
+    return False
 
 # API key validator (for external API calls if needed)
 def validate_api_key():

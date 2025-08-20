@@ -9,9 +9,10 @@ from .middlewares.auth_middleware import verify_token
 
 # Store active user sessions
 active_users = {}
-
+print("Socket.IO handlers initialized")
 @socketio.on('connect')
 def handle_connect():
+    print(f"Client connected: {request.sid}")
     """Handle client connection"""
     print(f"Client connected: {request.sid}")
     emit('connected', {'status': 'Connected to notification server'})

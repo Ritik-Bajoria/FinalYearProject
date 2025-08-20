@@ -567,7 +567,7 @@ const OrganizeEventDialog = ({ open, onClose, onSubmit, clubId, currentUserId })
             />
           </Grid>
 
-          <Grid item xs={12} sm={4}>
+          {/* <Grid item xs={12} sm={4}>
             <FormControlLabel
               control={
                 <Checkbox
@@ -580,7 +580,7 @@ const OrganizeEventDialog = ({ open, onClose, onSubmit, clubId, currentUserId })
               label="Enable QR Check-in"
               disabled={isSubmitting}
             />
-          </Grid>
+          </Grid> */}
 
           <Grid item xs={12}>
             <TextField

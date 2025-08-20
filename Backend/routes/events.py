@@ -12,10 +12,12 @@ from ..models.club import Club
 from ..models.event_chat import EventChat
 from ..models.event_document import EventDocument
 from ..models.event_budget import EventBudget
+from ..models.event_tag import EventTag
 from ..models.event_registration import EventRegistration
 from ..models.user_event_association import UserEventAssociation
 from ..models.attendance import Attendance
 from ..models.feedback import Feedback
+from ..models.user_event_association import get_user_role_in_event
 from ..models.volunteer_posting import VolunteerPosting
 from ..models.base import db
 from ..utils.response_utils import make_response
@@ -56,17 +58,52 @@ def event_to_dict(event, include_associations=False):
         "target_audience": event.target_audience,
         "capacity": event.capacity,
 
-        # Budget
-        "estimated_budget": str(event.estimated_budget) if event.estimated_budget else None,
-        "actual_spent": str(event.actual_spent) if event.actual_spent else None,
+        # Budget - Convert to float instead of string for frontend compatibility
+        "estimated_budget": float(event.estimated_budget) if event.estimated_budget else 0,
+        "actual_spent": float(event.actual_spent) if event.actual_spent else 0,
 
         # Creator
         "created_by": event.created_by,
         "created_by_name": creator.full_name if creator else None,
 
         # Meta
-        "registration_count": event.registration_count,
+        "registration_count": event.registration_count if hasattr(event, 'registration_count') else len(event.registrations),
+        
+        # Club reference
+        "club_id": event.club_id,
+        "club_ref": {
+            "club_id": event.club_ref.club_id,
+            "name": event.club_ref.name,
+            "description": event.club_ref.description,
+            "leader_id": event.club_ref.leader_id
+        } if event.club_ref else None,
     }
+
+    # Event tags
+    event_data["event_tags"] = [
+        {
+            "tag_id": tag.tag_id,
+            "tag_name": tag.tag_name
+        } for tag in event.event_tags
+    ] if hasattr(event, 'event_tags') else []
+
+    # User associations (organizers, volunteers, attendees)
+    if hasattr(event, 'user_associations'):
+        event_data["user_associations"] = [
+            {
+                "user_id": ua.user_id,
+                "role": ua.role,
+                "user": {
+                    "user_id": ua.user.user_id,
+                    "full_name": ua.user.full_name,
+                    "email": ua.user.email
+                }
+            } for ua in event.user_associations
+        ]
+        
+        # Add user_role for the current user (this would be set separately)
+        if hasattr(event, 'user_role'):
+            event_data["user_role"] = event.user_role
 
     if include_associations:
         # Organizers/Admins
@@ -90,6 +127,27 @@ def event_to_dict(event, include_associations=False):
             }
             for reg in registrations
         ]
+
+        # Budget details
+        if hasattr(event, 'budget') and event.budget:
+            event_data["budget"] = {
+                "budget_id": event.budget.budget_id,
+                "allocated_amount": float(event.budget.allocated_amount) if event.budget.allocated_amount else 0,
+                "spent_amount": float(event.budget.spent_amount) if event.budget.spent_amount else 0,
+                "remaining_budget": float(event.budget.remaining_budget) if hasattr(event.budget, 'remaining_budget') else 0
+            }
+
+        # Documents
+        if hasattr(event, 'documents'):
+            event_data["documents"] = [
+                {
+                    "document_id": doc.document_id,
+                    "file_name": doc.file_name,
+                    "file_path": doc.file_path,
+                    "uploaded_by": doc.uploaded_by,
+                    "uploaded_at": doc.uploaded_at.isoformat() if doc.uploaded_at else None
+                } for doc in event.documents
+            ]
 
     return event_data
 
@@ -181,9 +239,10 @@ def get_event_details(current_user, event_id):
         return make_response(message=f"Failed to get event details: {str(e)}", error=str(e), status_code=500)
 
 # Get event chats based on user role
-@events_bp.route('/<int:event_id>/chats/<chat_type>', methods=['GET'])
+# Update your existing route to handle the new endpoint structure
+@events_bp.route('/<int:event_id>/chats/<chat_type>/messages', methods=['GET', 'POST'])
 @token_required
-def get_event_chats(current_user, event_id, chat_type):
+def handle_event_chat_messages(current_user, event_id, chat_type):
     try:
         current_user_id = current_user.user_id
         
@@ -206,25 +265,98 @@ def get_event_chats(current_user, event_id, chat_type):
         if chat_type not in valid_chat_types.get(user_association.role, []):
             return make_response(message="Access denied to this chat", error="Access denied to this chat", status_code=403)
         
-        # Get messages for this chat type
-        chats = EventChat.query.filter_by(
-            event_id=event_id,
-            chat_type=chat_type
-        ).order_by(EventChat.timestamp.asc()).all()
-        
-        messages = [{
-            'message_id': chat.id,
-            'sender_id': chat.sender_id,
-            'sender_name': chat.sender.full_name,
-            'message': chat.message,
-            'timestamp': chat.timestamp.isoformat(),
-            'chat_type': chat.chat_type
-        } for chat in chats]
-        
-        return make_response(data=messages)
+        if request.method == 'GET':
+            # Get messages with pagination
+            page = request.args.get('page', 1, type=int)
+            per_page = request.args.get('per_page', 50, type=int)
+            
+            chats = EventChat.query.filter_by(
+                event_id=event_id,
+                chat_type=chat_type
+            ).order_by(EventChat.timestamp.desc()).paginate(
+                page=page,
+                per_page=per_page,
+                error_out=False
+            )
+            
+            messages = []
+            for chat in chats.items:
+                message_data = {
+                    'id': chat.id,
+                    'sender_id': chat.sender_id,
+                    'sender_name': chat.sender.full_name if chat.sender else "Unknown",
+                    'message': chat.message,
+                    'timestamp': chat.timestamp.isoformat(),
+                    'chat_type': chat.chat_type,
+                    'reply_to_id': chat.reply_to_id
+                }
+                
+                # Add reply context if available
+                if chat.reply_to_id:
+                    reply_message = EventChat.query.get(chat.reply_to_id)
+                    if reply_message:
+                        reply_sender = User.query.get(reply_message.sender_id)
+                        message_data['reply_to_message'] = {
+                            'sender_name': reply_sender.full_name if reply_sender else "Unknown",
+                            'message': reply_message.message
+                        }
+                
+                messages.append(message_data)
+            
+            return make_response(data={
+                'messages': messages,
+                'total': chats.total,
+                'pages': chats.pages,
+                'current_page': page
+            })
+            
+        elif request.method == 'POST':
+            # Handle message creation
+            data = request.get_json()
+            message_text = data.get('message')
+            reply_to_id = data.get('reply_to')
+            
+            if not message_text:
+                return make_response(message="Message is required", error="Message is required", status_code=400)
+            
+            # Create new message
+            chat_message = EventChat(
+                event_id=event_id,
+                sender_id=current_user_id,
+                message=message_text,
+                chat_type=chat_type,
+                timestamp=datetime.utcnow(),
+                reply_to_id=reply_to_id
+            )
+            
+            db.session.add(chat_message)
+            db.session.commit()
+            
+            # Prepare response
+            message_data = {
+                'id': chat_message.id,
+                'sender_id': chat_message.sender_id,
+                'sender_name': current_user.full_name,
+                'message': chat_message.message,
+                'timestamp': chat_message.timestamp.isoformat(),
+                'chat_type': chat_message.chat_type,
+                'reply_to_id': chat_message.reply_to_id
+            }
+            
+            # Add reply context if available
+            if chat_message.reply_to_id:
+                reply_message = EventChat.query.get(chat_message.reply_to_id)
+                if reply_message:
+                    reply_sender = User.query.get(reply_message.sender_id)
+                    message_data['reply_to_message'] = {
+                        'sender_name': reply_sender.full_name if reply_sender else "Unknown",
+                        'message': reply_message.message
+                    }
+            
+            return make_response(data=message_data, message="Message sent successfully")
         
     except Exception as e:
-        return make_response(message=f"Failed to get chats: {str(e)}", error=str(e), status_code=500)
+        return make_response(message=f"Failed to process request: {str(e)}", error=str(e), status_code=500)
 
 # Send message to event chat
 @events_bp.route('/<int:event_id>/chats/<chat_type>', methods=['POST'])
@@ -277,6 +409,82 @@ def send_event_message(current_user, event_id, chat_type):
     except Exception as e:
         return make_response(message=f"Failed to send message: {str(e)}", error=str(e), status_code=500)
 
+@events_bp.route('/<int:event_id>/chats/<chat_type>', methods=['GET'])
+@token_required
+def get_event_messages(current_user, event_id, chat_type):
+    try:
+        current_user_id = current_user.user_id
+
+        # Validate chat type
+        valid_chat_types = ['organizer_admin', 'organizer_volunteer', 'attendee_only']
+        if chat_type not in valid_chat_types:
+            return make_response(
+                error="Invalid chat type",
+                status_code=400
+            )
+
+        # Check if event exists
+        event = Event.query.get_or_404(event_id)
+
+        # Access control
+        if chat_type == 'organizer_admin':
+            from ..models.user_event_association import get_user_role_in_event
+            
+            role = get_user_role_in_event(current_user_id, event_id)
+
+            if role not in ['admin', 'organizer']:
+                return make_response(
+                    error="Access denied",
+                    status_code=403
+                )
+
+        # Pagination
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+
+        messages = EventChat.query.filter_by(
+            event_id=event_id,
+            chat_type=chat_type
+        ).order_by(EventChat.timestamp.asc()).paginate(
+            page=page,
+            per_page=per_page,
+            error_out=False
+        )
+
+        # Format messages
+        messages_data = []
+        for message in messages.items:
+            messages_data.append({
+                'id': message.id,
+                'event_id': message.event_id,
+                'sender_id': message.sender_id,
+                'sender_name': message.sender.full_name if message.sender else 'Unknown',
+                'sender_avatar': message.sender.profile_picture if message.sender else None,
+                'message': message.message,
+                'chat_type': message.chat_type,
+                'timestamp': message.timestamp.isoformat() if message.timestamp else None,
+                'is_own_message': message.sender_id == current_user_id
+            })
+
+        return make_response(
+            data={
+                'messages': messages_data,
+                'total': messages.total,
+                'pages': messages.pages,
+                'current_page': page,
+                'per_page': per_page
+            },
+            message="Messages fetched successfully",
+            status_code=200
+        )
+
+    except Exception as e:
+        return make_response(
+            error=str(e),
+            status_code=500
+        )
+
+    
 # Upload event document
 @events_bp.route('/<int:event_id>/documents', methods=['POST'])
 @token_required
@@ -649,7 +857,7 @@ def update_event_approval(current_user,event_id):
 
 @events_bp.route('/<int:event_id>', methods=['PUT'])
 @token_required
-def update_event(current_user,event_id):
+def update_event(current_user, event_id):
     try:
         current_user_id = current_user.user_id
         
@@ -667,13 +875,60 @@ def update_event(current_user,event_id):
             if not user_association:
                 return make_response(message="Unauthorized to update event", error="Unauthorized", status_code=403)
 
+        # Handle form data and file uploads
         data = request.form
         
-        # Update event fields
-        for field in ['title', 'description', 'venue', 'category']:
-            if field in data:
-                setattr(event, field, data[field])
+        # Update basic event fields
+        basic_fields = [
+            'title', 'description', 'venue', 'category', 
+            'target_audience', 'capacity', 'duration_minutes',
+            'visibility', 'event_status', 'approval_status'
+        ]
         
+        for field in basic_fields:
+            if field in data:
+                if field in ['capacity', 'duration_minutes']:
+                    # Convert numeric fields
+                    setattr(event, field, int(data[field]) if data[field] else None)
+                else:
+                    setattr(event, field, data[field])
+
+        # Handle budget
+        if 'estimated_budget' in data:
+            try:
+                event.estimated_budget = float(data['estimated_budget']) if data['estimated_budget'] else None
+            except (ValueError, TypeError):
+                pass
+
+        # Handle date and time fields
+        if 'event_date' in data:
+            try:
+                event.event_date = datetime.fromisoformat(data['event_date'].replace('Z', '+00:00'))
+            except (ValueError, TypeError):
+                pass
+
+        # Handle registration end date
+        if 'registration_end_date' in data and data['registration_end_date']:
+            try:
+                event.registration_end_date = datetime.fromisoformat(data['registration_end_date'].replace('Z', '+00:00'))
+            except (ValueError, TypeError):
+                pass
+
+        # Handle tags
+        if 'tags' in request.form:
+            tags = request.form.getlist('tags')
+            # Clear existing tags
+            event.event_tags = []
+            # Add new tags
+            for tag_name in tags:
+                if tag_name.strip():
+                    # Find existing tag or create new one
+                    tag = EventTag.query.filter_by(tag_name=tag_name.strip()).first()
+                    if not tag:
+                        tag = EventTag(tag_name=tag_name.strip())
+                        db.session.add(tag)
+                    event.event_tags.append(tag)
+
         # Handle file upload if present
         if 'image' in request.files:
             file = request.files['image']
@@ -686,9 +941,25 @@ def update_event(current_user,event_id):
                 event.image_url = file_path
 
         db.session.commit()
-        return make_response(data=event_to_dict(event))
+        
+        # Return complete event data
+        event_with_details = Event.query.options(
+            joinedload(Event.user_associations).joinedload(UserEventAssociation.user),
+            joinedload(Event.budget),
+            joinedload(Event.documents),
+            joinedload(Event.event_tags),
+            joinedload(Event.registrations),
+            joinedload(Event.feedbacks),
+            joinedload(Event.club_ref)
+        ).filter_by(event_id=event_id).first()
+        
+        # Add user role information
+        event_with_details.user_role = get_user_role_in_event(current_user_id, event_id)
+        
+        return make_response(data=event_to_dict(event_with_details, include_associations=True))
         
     except Exception as e:
+        db.session.rollback()
         return make_response(message=f"Failed to update event: {str(e)}", error=str(e), status_code=500)
 
 @events_bp.route('/<int:event_id>', methods=['DELETE'])

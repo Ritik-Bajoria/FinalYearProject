@@ -100,26 +100,17 @@ const deleteEventDocument = useCallback(
   [apiCall]
 );
   const updateEvent = useCallback(
-    async (eventId, payload) => {
-      const formData = new FormData();
+  async (eventId, formData) => {
+    const updatedEvent = await apiCall(`/events/${eventId}`, {
+      method: 'PUT',
+      body: formData,
+    });
 
-      // Append only non-empty fields
-      Object.entries(payload).forEach(([key, value]) => {
-        if (value !== undefined && value !== null && value !== '') {
-          formData.append(key, value);
-        }
-      });
-
-      const updatedEvent = await apiCall(`/events/${eventId}`, {
-        method: 'PUT',
-        body: formData,
-      });
-
-      setEventData((prev) => ({ ...prev, event: updatedEvent }));
-      return updatedEvent;
-    },
-    [apiCall]
-  );
+    setEventData((prev) => ({ ...prev, event: updatedEvent }));
+    return updatedEvent;
+  },
+  [apiCall]
+);
 
   const deleteEvent = useCallback(
     async (eventId) => {

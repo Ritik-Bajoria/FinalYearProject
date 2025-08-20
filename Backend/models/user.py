@@ -75,3 +75,13 @@ class User(BaseModel, UserMixin):
         elif self.admin:
             return self.admin.full_name
         return "Unknown"
+    
+    @property
+    def profile_picture(self):
+        if self.student:
+            return self.student.profile_picture
+        elif self.faculty:
+            return getattr(self.faculty, "profile_picture", None)
+        elif self.admin:
+            return getattr(self.admin, "profile_picture", None)
+        return None
