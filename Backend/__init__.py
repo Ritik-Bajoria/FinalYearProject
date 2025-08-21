@@ -24,7 +24,9 @@ def create_app():
                      logger=True,
                      engineio_logger=True,
                      ping_timeout=60,
-                     ping_interval=25)
+                     ping_interval=25,
+                     transports=['polling', 'websocket'],
+                     allow_upgrades=True)
     
     with app.app_context():
         # Import all models to ensure they're registered
@@ -81,8 +83,9 @@ def create_app():
         app.register_blueprint(club_dashboard_api, url_prefix='/api')
         app.register_blueprint(notifications_bp, url_prefix='/api')
         
-        # Import socket handlers after app initialization
+        # Import socket handlers after app initialization to register event handlers
         from Backend import socket_handlers
+        print("✓ Socket handlers imported and registered")
         
         # Start reminder scheduler
         try:

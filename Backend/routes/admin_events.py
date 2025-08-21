@@ -555,8 +555,7 @@ def get_event_chat_messages(current_user, event_id):
             'sender_name': sender_name,
             'message': msg.message,
             'chat_type': msg.chat_type,
-            'timestamp': msg.timestamp.isoformat(),
-            'reply_to_id': msg.reply_to_id  # Added reply support
+            'timestamp': msg.timestamp.isoformat()
         })
     
     return jsonify({
@@ -579,7 +578,6 @@ def send_event_chat_message(current_user, event_id):
     
     message_text = data.get('message')
     chat_type = data.get('chat_type', 'organizer_admin')
-    reply_to_id = data.get('reply_to_id')
     
     if not message_text:
         return jsonify({'error': 'Message text is required'}), 400
@@ -597,8 +595,7 @@ def send_event_chat_message(current_user, event_id):
             sender_id=current_user.user_id,
             message=message_text,
             chat_type=chat_type,
-            timestamp=datetime.utcnow(),
-            reply_to_id=reply_to_id
+            timestamp=datetime.utcnow()
         )
         
         db.session.add(new_message)
@@ -623,29 +620,8 @@ def send_event_chat_message(current_user, event_id):
             'sender_name': sender_name,
             'message': new_message.message,
             'chat_type': new_message.chat_type,
-            'timestamp': new_message.timestamp.isoformat(),
-            'reply_to_id': new_message.reply_to_id
+            'timestamp': new_message.timestamp.isoformat()
         }
-        
-        # Add reply context if available
-        if reply_to_id:
-            reply_message = EventChat.query.get(reply_to_id)
-            if reply_message:
-                reply_sender = User.query.get(reply_message.sender_id)
-                reply_sender_name = None
-                if reply_sender:
-                    if reply_sender.student:
-                        reply_sender_name = reply_sender.student.full_name
-                    elif reply_sender.faculty:
-                        reply_sender_name = reply_sender.faculty.full_name
-                    elif reply_sender.admin:
-                        reply_sender_name = reply_sender.admin.full_name
-                
-                response_data['reply_to'] = {
-                    'id': reply_message.id,
-                    'sender_name': reply_sender_name,
-                    'message': reply_message.message
-                }
         
         return jsonify({
             'success': True,

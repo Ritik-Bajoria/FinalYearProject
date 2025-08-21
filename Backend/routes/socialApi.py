@@ -1,17 +1,18 @@
 from flask import Blueprint, request, jsonify
-from flask_login import current_user, login_required
+from flask_login import current_user
+from ..middlewares.auth_middleware import token_required
 from Backend import db
 from Backend.models import (
     Event, AdminPosting, VolunteerPosting, VolunteerApplication,
-    EventRegistration, Notification, SystemLog, User
+    EventRegistration, Notification, SystemLog, User, UserEventAssociation
 )
 from datetime import datetime
 
 social_bp = Blueprint('social', __name__)
 
 @social_bp.route('/social/posts', methods=['GET'])
-@login_required
-def get_social_posts():
+@token_required
+def get_social_posts(current_user):
     """Get all events, admin postings, and volunteer postings"""
     try:
         # Get events
@@ -36,21 +37,35 @@ def get_social_posts():
         
         # Add events
         for event in events:
+            # Check user's role in the event
+            user_role = get_user_role_in_event(current_user.user_id, event.event_id)
+            
             # Check if user is already registered
             registration = EventRegistration.query.filter_by(
                 user_id=current_user.user_id,
                 event_id=event.event_id
             ).first()
             
+            # Determine registration status based on user role
+            if user_role == 'organizer':
+                registration_status = 'organizer'
+            elif user_role == 'volunteer':
+                registration_status = 'volunteer'
+            elif registration:
+                registration_status = registration.status
+            else:
+                registration_status = 'not_registered'
+            
             posts.append({
                 'type': 'event',
                 'id': event.event_id,
                 'title': event.title,
                 'description': event.description,
-                'event_date': event.event_date.isoformat(),
+                'event_date': event.event_date.isoformat() if event.event_date else None,
                 'venue': event.venue,
                 'image_url': event.image_url,
-                'registration_status': registration.status if registration else 'not_registered',
+                'registration_status': registration_status,
+                'user_role': user_role,  # Add user's role for frontend
                 'capacity': event.capacity,
                 'current_registrations': event.registration_count
             })
@@ -62,18 +77,29 @@ def get_social_posts():
                 'id': posting.posting_id,
                 'title': posting.title,
                 'content': posting.content,
-                'created_at': posting.created_at.isoformat(),
+                'created_at': posting.created_at.isoformat() if posting.created_at else None,
                 'is_pinned': posting.is_pinned,
                 'admin_name': posting.admin.full_name if posting.admin else 'Admin'
             })
         
         # Add volunteer postings
         for posting in volunteer_postings:
+            # Check user's role in the event
+            user_role = get_user_role_in_event(current_user.user_id, posting.event_id)
+            
             # Check if user has already applied
             application = VolunteerApplication.query.filter_by(
                 user_id=current_user.user_id,
                 posting_id=posting.posting_id
             ).first()
+            
+            # Determine application status based on user role
+            if user_role == 'organizer':
+                application_status = 'organizer'
+            elif application:
+                application_status = application.status
+            else:
+                application_status = 'not_applied'
             
             posts.append({
                 'type': 'volunteer',
@@ -83,7 +109,8 @@ def get_social_posts():
                 'role': posting.role,
                 'description': posting.description,
                 'slots_available': posting.slots_available,
-                'application_status': application.status if application else 'not_applied'
+                'application_status': application_status,
+                'user_role': user_role  # Add user's role for frontend
             })
         
         # Sort posts by date (newest first)
@@ -92,14 +119,33 @@ def get_social_posts():
         return jsonify(posts)
     
     except Exception as e:
+        # Create error system log
+        log = SystemLog(
+            action_by=current_user.user_id if current_user and hasattr(current_user, 'user_id') else None,
+            action_type='error',
+            log_type='error',
+            description=f'Error fetching social posts: {str(e)}'
+        )
+        db.session.add(log)
+        db.session.commit()
+        
         return jsonify({'error': str(e)}), 500
 
 @social_bp.route('/events/<int:event_id>/register', methods=['POST'])
-@login_required
-def register_for_event(event_id):
+@token_required
+def register_for_event(current_user, event_id):
     """Register for an event"""
     try:
         event = Event.query.get_or_404(event_id)
+        
+        # Check user's current role in the event
+        user_role = get_user_role_in_event(current_user.user_id, event_id)
+        
+        if user_role in ['organizer', 'volunteer']:
+            return jsonify({
+                'error': f'Cannot register - you are already a {user_role} for this event',
+                'user_role': user_role
+            }), 400
         
         # Check if already registered
         existing_registration = EventRegistration.query.filter_by(
@@ -111,6 +157,12 @@ def register_for_event(event_id):
             return jsonify({
                 'message': f'Already {existing_registration.status} for this event',
                 'status': existing_registration.status
+            }), 400
+        
+        # Check if event is at capacity
+        if event.capacity and event.registration_count >= event.capacity:
+            return jsonify({
+                'error': 'Event is at full capacity'
             }), 400
         
         # Create new registration with pending status
@@ -125,10 +177,10 @@ def register_for_event(event_id):
         
         # Create system log
         log = SystemLog(
-            user_id=current_user.user_id,
-            action=f'Requested registration for event: {event.title}',
-            module='Social',
-            details=f'User {current_user.full_name} requested to register for event {event.title}'
+            action_by=current_user.user_id,
+            action_type='event_registration_request',
+            log_type='info',
+            description=f'User {current_user.full_name} requested registration for event: {event.title}'
         )
         db.session.add(log)
         
@@ -151,14 +203,34 @@ def register_for_event(event_id):
     
     except Exception as e:
         db.session.rollback()
+        
+        # Create error system log
+        log = SystemLog(
+            action_by=current_user.user_id,
+            action_type='error',
+            log_type='error',
+            description=f'Error in event registration: {str(e)}'
+        )
+        db.session.add(log)
+        db.session.commit()
+        
         return jsonify({'error': str(e)}), 500
 
 @social_bp.route('/volunteer/<int:posting_id>/apply', methods=['POST'])
-@login_required
-def apply_for_volunteer(posting_id):
+@token_required
+def apply_for_volunteer(current_user, posting_id):
     """Apply for a volunteer position"""
     try:
         posting = VolunteerPosting.query.get_or_404(posting_id)
+        
+        # Check user's current role in the event
+        user_role = get_user_role_in_event(current_user.user_id, posting.event_id)
+        
+        if user_role == 'organizer':
+            return jsonify({
+                'error': 'Cannot apply - you are already an organizer for this event',
+                'user_role': user_role
+            }), 400
         
         # Check if already applied
         existing_application = VolunteerApplication.query.filter_by(
@@ -170,6 +242,19 @@ def apply_for_volunteer(posting_id):
             return jsonify({
                 'message': f'Application already {existing_application.status}',
                 'status': existing_application.status
+            }), 400
+        
+        # Check if user is already a volunteer for this event
+        if user_role == 'volunteer':
+            return jsonify({
+                'error': 'You are already a volunteer for this event',
+                'user_role': user_role
+            }), 400
+        
+        # Check if there are available slots
+        if posting.slots_available <= 0:
+            return jsonify({
+                'error': 'No volunteer slots available'
             }), 400
         
         # Create new application
@@ -184,10 +269,10 @@ def apply_for_volunteer(posting_id):
         
         # Create system log
         log = SystemLog(
-            user_id=current_user.user_id,
-            action=f'Applied for volunteer position: {posting.role}',
-            module='Social',
-            details=f'User {current_user.full_name} applied for volunteer role {posting.role} for event {posting.event.title if posting.event else "Unknown"}'
+            action_by=current_user.user_id,
+            action_type='volunteer_application',
+            log_type='info',
+            description=f'User {current_user.full_name} applied for volunteer role: {posting.role} for event: {posting.event.title if posting.event else "Unknown"}'
         )
         db.session.add(log)
         
@@ -211,11 +296,22 @@ def apply_for_volunteer(posting_id):
     
     except Exception as e:
         db.session.rollback()
+        
+        # Create error system log
+        log = SystemLog(
+            action_by=current_user.user_id,
+            action_type='error',
+            log_type='error',
+            description=f'Error in volunteer application: {str(e)}'
+        )
+        db.session.add(log)
+        db.session.commit()
+        
         return jsonify({'error': str(e)}), 500
 
 @social_bp.route('/user/registrations', methods=['GET'])
-@login_required
-def get_user_registrations():
+@token_required
+def get_user_registrations(current_user):
     """Get user's event registrations and volunteer applications"""
     try:
         # Get event registrations
@@ -228,7 +324,7 @@ def get_user_registrations():
             events.append({
                 'event_id': reg.event.event_id,
                 'title': reg.event.title,
-                'event_date': reg.event.event_date.isoformat(),
+                'event_date': reg.event.event_date.isoformat() if reg.event.event_date else None,
                 'status': reg.status,
                 'type': 'event'
             })
@@ -248,10 +344,48 @@ def get_user_registrations():
                 'type': 'volunteer'
             })
         
+        # Get user's event roles (organizer/volunteer)
+        user_associations = UserEventAssociation.query.filter_by(
+            user_id=current_user.user_id
+        ).join(Event).all()
+        
+        roles = []
+        for assoc in user_associations:
+            roles.append({
+                'event_id': assoc.event.event_id,
+                'title': assoc.event.title,
+                'event_date': assoc.event.event_date.isoformat() if assoc.event.event_date else None,
+                'role': assoc.role,
+                'type': 'role_association'
+            })
+        
         return jsonify({
             'events': events,
-            'volunteers': volunteers
+            'volunteers': volunteers,
+            'roles': roles
         })
     
     except Exception as e:
+        # Create error system log
+        log = SystemLog(
+            action_by=current_user.user_id,
+            action_type='error',
+            log_type='error',
+            description=f'Error fetching user registrations: {str(e)}'
+        )
+        db.session.add(log)
+        db.session.commit()
+        
         return jsonify({'error': str(e)}), 500
+
+def get_user_role_in_event(user_id, event_id):
+    """
+    Returns the role of a given user in a specific event.
+    If no association is found, returns None.
+    """
+    association = UserEventAssociation.query.filter_by(
+        user_id=user_id,
+        event_id=event_id
+    ).first()
+
+    return association.role if association else None
