@@ -13,10 +13,12 @@ class EventChat(BaseModel):
         nullable=False
     )
     timestamp = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    reply_to_id = db.Column(db.Integer, db.ForeignKey('event_chats.id'), nullable=True)  # Added reply support
 
     # Relationships
     sender = db.relationship('User', backref='event_messages')
     event = db.relationship('Event', backref='event_chats')
+    reply_to = db.relationship('EventChat', remote_side=[id], backref='replies')  # Self-referential relationship
 
     def __repr__(self):
         return f"<EventChat id={self.id} event_id={self.event_id} sender_id={self.sender_id} chat_type={self.chat_type} timestamp={self.timestamp}>"

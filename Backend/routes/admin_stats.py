@@ -16,7 +16,7 @@ admin_stats_bp = Blueprint('admin_stats', __name__, url_prefix='/admin')
 def dashboard_stats():
     total_users = User.query.count()
     active_events = Event.query.filter(Event.event_date >= datetime.utcnow()).count()
-    pending_approvals = Event.query.filter_by(status='pending').count()
+    pending_approvals = Event.query.filter_by(approval_status='pending').count()
     
     # Count system alerts (example: recent errors)
     system_alerts = SystemLog.query.filter(
@@ -86,7 +86,7 @@ def recent_events():
             'title': event.title,
             'organizer_name': organizer_name,
             'event_date': event.event_date,
-            'status': event.status,
+            'status': event.approval_status,
             'registered_count': EventRegistration.query.filter_by(event_id=event.event_id).count()
         })
     

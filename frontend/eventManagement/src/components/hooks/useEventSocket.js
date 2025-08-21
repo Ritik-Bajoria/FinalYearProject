@@ -8,6 +8,7 @@ const useEventSocket = (eventId, chatType, userId) => {
     const [messages, setMessages] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [typingUsers, setTypingUsers] = useState([]);
+    const [connectionError, setConnectionError] = useState(null);
     
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:7000';
 
@@ -24,7 +25,15 @@ const useEventSocket = (eventId, chatType, userId) => {
                 return;
             }
 
-            const response = await fetch(`${API_BASE_URL}/events/${eventId}/chats/${chatType}`, {
+            // Use admin endpoint for admin users, regular endpoint for others
+            const isAdmin = localStorage.getItem('userRole') === 'admin';
+            const endpoint = isAdmin 
+                ? `${API_BASE_URL}/admin/events/${eventId}/chat?chat_type=${chatType}`
+                : `${API_BASE_URL}/events/${eventId}/chats/${chatType}`;
+                
+            console.log('📥 Loading messages from:', endpoint);
+            
+            const response = await fetch(endpoint, {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
@@ -37,13 +46,14 @@ const useEventSocket = (eventId, chatType, userId) => {
             
             const data = await response.json();
             
-            // Extract messages from the nested data structure
-            // Your API returns: { data: { messages: [...] } }
-            const messagesData = data.data?.messages || [];
+            // Extract messages from the response
+            // Admin endpoint returns: { success: true, messages: [...] }
+            // Regular endpoint returns: { data: { messages: [...] } }
+            const messagesData = data.success ? (data.messages || []) : (data.data?.messages || []);
             setMessages(messagesData);
             
         } catch (error) {
-            console.error('Failed to load initial messages:', error);
+            console.error('❌ Failed to load initial messages:', error);
             setMessages([]);
         } finally {
             setIsLoading(false);
@@ -55,21 +65,29 @@ const useEventSocket = (eventId, chatType, userId) => {
         
         if (!token) {
             console.error('No token available for socket connection');
+            setConnectionError('No authentication token found');
             return null;
         }
 
+        console.log('🔌 Connecting to socket server:', API_BASE_URL);
+
         const newSocket = io(API_BASE_URL, {
             path: '/socket.io',
-            transports: ['websocket', 'polling'],
+            transports: ['polling', 'websocket'],
             auth: { token },
             reconnection: true,
             reconnectionAttempts: 5,
             reconnectionDelay: 1000,
+            timeout: 20000,
+            forceNew: true,
+            autoConnect: true,
+            upgrade: true
         });
 
         newSocket.on('connect', () => {
-            console.log('Socket connected');
+            console.log('✅ Event socket connected');
             setIsConnected(true);
+            setConnectionError(null);
             newSocket.emit('authenticate', { token });
             
             if (eventId && chatType) {
@@ -83,16 +101,28 @@ const useEventSocket = (eventId, chatType, userId) => {
         });
 
         newSocket.on('disconnect', (reason) => {
-            console.log('Socket disconnected:', reason);
+            console.log('❌ Event socket disconnected:', reason);
             setIsConnected(false);
+            setConnectionError(`Disconnected: ${reason}`);
         });
 
         newSocket.on('connect_error', (error) => {
-            console.error('Socket connection error:', error);
+            console.error('❌ Event socket connection error:', error);
             setIsConnected(false);
+            setConnectionError(`Connection error: ${error.message}`);
+        });
+
+        newSocket.on('authenticated', (data) => {
+            console.log('✅ Event socket authenticated:', data);
+        });
+
+        newSocket.on('auth_error', (error) => {
+            console.error('❌ Event socket authentication error:', error);
+            setConnectionError(`Authentication error: ${error.message}`);
         });
 
         newSocket.on('new_event_message', (message) => {
+            console.log('📨 Received new event message:', message);
             setMessages(prev => {
                 const messageExists = prev.some(msg => 
                     msg.id === message.id || 
@@ -109,11 +139,13 @@ const useEventSocket = (eventId, chatType, userId) => {
         });
 
         newSocket.on('user_typing_event', (data) => {
+            console.log('⌨️ Typing event received:', data);
             setTypingUsers(data.users || []);
         });
 
         newSocket.on('error', (error) => {
-            console.error('Socket error:', error);
+            console.error('❌ Event socket error:', error);
+            setConnectionError(`Socket error: ${error.message}`);
         });
 
         setSocket(newSocket);
@@ -125,7 +157,8 @@ const useEventSocket = (eventId, chatType, userId) => {
             if (socket && eventId && chatType) {
                 return new Promise((resolve, reject) => {
                     try {
-                        socket.timeout(5000).emit(
+                        console.log('📤 Sending real-time message:', messageData);
+                        socket.timeout(7000).emit(
                             "send_event_message",
                             {
                                 event_id: eventId,
@@ -134,15 +167,19 @@ const useEventSocket = (eventId, chatType, userId) => {
                             },
                             (err, response) => {
                                 if (err) {
+                                    console.error('❌ Message send timeout:', err);
                                     reject(new Error("Message send timeout"));
                                 } else if (response && response.error) {
+                                    console.error('❌ Message send error:', response.error);
                                     reject(new Error(response.error));
                                 } else {
+                                    console.log('✅ Message sent successfully:', response);
                                     resolve(response || { success: true });
                                 }
                             }
                         );
                     } catch (error) {
+                        console.error('❌ Message send exception:', error);
                         reject(error);
                     }
                 });
@@ -154,10 +191,11 @@ const useEventSocket = (eventId, chatType, userId) => {
 
     const sendTypingStatus = useCallback((isTyping) => {
         if (socket && eventId && chatType) {
+            console.log('⌨️ Sending typing status:', isTyping);
             socket.emit('typing_event', {
                 event_id: eventId,
                 chat_type: chatType,
-                isTyping
+                is_typing: isTyping
             });
         }
     }, [socket, eventId, chatType]);
@@ -167,14 +205,17 @@ const useEventSocket = (eventId, chatType, userId) => {
         setMessages([]);
         setIsLoading(true);
         setTypingUsers([]);
+        setConnectionError(null);
     }, [eventId, chatType]);
 
     useEffect(() => {
         if (eventId && chatType) {
+            console.log('🎉 Setting up event socket for:', { eventId, chatType });
             const newSocket = connectSocket();
             
             return () => {
                 if (newSocket) {
+                    console.log('🧹 Disconnecting event socket');
                     newSocket.disconnect();
                 }
             };
@@ -187,6 +228,7 @@ const useEventSocket = (eventId, chatType, userId) => {
         messages,
         isLoading,
         typingUsers,
+        connectionError,
         sendRealTimeMessage,
         sendTypingStatus
     };

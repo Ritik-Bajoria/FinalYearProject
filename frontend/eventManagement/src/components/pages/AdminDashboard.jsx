@@ -4,7 +4,7 @@ import Dashboard from '../admin/Dashboard/Dashboard';
 import UserManagement from '../admin/UserManagement/UserManagement';
 import EventManagement from '../admin/EventManagement/EventManagement';
 import SystemLogs from '../admin/SystemLogs/SystemLogs';
-import Settings from '../admin/Settings/Settings';
+// import Settings from '../admin/Settings/Settings';
 import useDashboardStats from '../hooks/useDashboardStats';
 
 const AdminDashboard = () => {
@@ -16,12 +16,12 @@ const AdminDashboard = () => {
       case 'dashboard':
         return (
           <Dashboard 
-            stats={stats} 
-            recentUsers={recentUsers} 
-            recentEvents={recentEvents} 
-            loading={loading} 
-            error={error} 
-            refreshAll={refreshAll} 
+            stats={stats}
+            recentUsers={recentUsers}
+            recentEvents={recentEvents}
+            loading={loading}
+            error={error}
+            refreshAll={refreshAll}
           />
         );
       case 'users':
@@ -30,10 +30,10 @@ const AdminDashboard = () => {
         return <EventManagement />;
       case 'logs':
         return <SystemLogs />;
-      case 'settings':
-        return <Settings />;
+      // case 'settings':
+      //   return <Settings />;
       default:
-        return <Dashboard />;
+        return <Dashboard stats={stats} recentUsers={recentUsers} recentEvents={recentEvents} loading={loading} error={error} refreshAll={refreshAll} />;
     }
   };
 
@@ -46,14 +46,18 @@ const AdminDashboard = () => {
   }, [activeTab, refreshAll]);
 
   return (
-    <AdminLayout 
-      activeTab={activeTab} 
-      setActiveTab={setActiveTab}
-      alertCount={stats.systemAlerts}
-    >
-      {renderContent()}
-    </AdminLayout>
+    <div className="min-h-screen bg-gray-50">
+      <AdminLayout 
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        alertCount={stats?.systemAlerts || 0}
+      >
+        <div className="w-full">
+          {renderContent()}
+        </div>
+      </AdminLayout>
+    </div>
   );
 };
 
-export default AdminDashboard; 
+export default AdminDashboard;

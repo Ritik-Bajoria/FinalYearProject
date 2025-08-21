@@ -139,12 +139,13 @@ def create_club_event(current_user, club_id):
     club = Club.query.get_or_404(club_id)
     if not is_club_leader(current_user.user_id, club):
         return make_response(error="Only club leader can create events", status_code=403)
-
+    print(request.form.get('category'))
     # read text fields from form
     title = request.form.get('title') or request.form.get('name')
     description = request.form.get('description')
     venue = request.form.get('venue')
     duration = request.form.get('duration_minutes')
+    category = request.form.get('category')
     # Prefer combined ISO event_date if provided, else try date+time
     event_date_str = request.form.get('event_date') or request.form.get('date')
     event_time_str = request.form.get('time')
@@ -197,6 +198,7 @@ def create_club_event(current_user, club_id):
         event_date=event_date,
         duration_minutes=int(duration) if duration else None,
         image_url=image_path,
+        category=category if category else 'Other',
         club_id=club_id,
         created_by=current_user.user_id,
         approval_status='pending',

@@ -185,7 +185,8 @@ def get_event_details(current_user, event_id):
         
         # Get user's role in this event
         user_role = user_association.role if user_association else 'creator'
-        
+        club = Club.query.get(event.club_id)
+        club_name = club.name if club else None
         # Serialize event data
         event_data = {
             'event_id': event.event_id,
@@ -209,6 +210,8 @@ def get_event_details(current_user, event_id):
             'user_role': user_role,
             'club_id': event.club_id,
             'created_by': event.created_by,
+            'club_name': club_name,
+            'organizer_name': next((ua.user.full_name for ua in event.user_associations if ua.role == "organizer"), None),
             'user_associations': [{
                 'user_id': ua.user_id,
                 'role': ua.role,

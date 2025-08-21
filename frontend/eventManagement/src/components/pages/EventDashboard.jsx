@@ -455,7 +455,7 @@ const EventDashboard = () => {
                                                                     {event.category || 'No category'}
                                                                 </Typography>
                                                             </Box>
-                                                            {event.estimated_budget && (
+                                                            {/* {event.estimated_budget && ( */}
                                                                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
                                                                     <Receipt sx={{ 
                                                                         color: theme.secondary, 
@@ -463,10 +463,10 @@ const EventDashboard = () => {
                                                                         fontSize: '1rem'
                                                                     }} />
                                                                     <Typography variant="body2" sx={{ color: theme.text }}>
-                                                                        Budget: ${event.estimated_budget}
+                                                                        Budget: {event.estimated_budget ? `$${event.estimated_budget}` : 'Not Defined'}
                                                                     </Typography>
                                                                 </Box>
-                                                            )}
+                                                            {/* )} */}
                                                         </Stack>
                                                     </Box>
                                                 </Grid>
@@ -517,7 +517,7 @@ const EventDashboard = () => {
                                                                     fontSize: '1rem'
                                                                 }} />
                                                                 <Typography variant="body2" sx={{ color: theme.text }}>
-                                                                    Organized by: {event.creator?.full_name || 'Unknown'}
+                                                                    Organized by: {event.club_name || 'Unknown'}
                                                                 </Typography>
                                                             </Box>
                                                         </Stack>

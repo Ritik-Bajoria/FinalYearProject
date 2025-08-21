@@ -22,16 +22,16 @@ const UserFilters = ({ filters, setFilters, onExport }) => {
         >
           <option value="">All Roles</option>
           <option value="student">Student</option>
-          <option value="faculty">Faculty</option>
+          {/* <option value="faculty">Faculty</option> */}
           <option value="admin">Admin</option>
         </select>
-        <button 
+        {/* <button 
           onClick={onExport}
           className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
         >
           <Download className="w-4 h-4" />
           <span>Export</span>
-        </button>
+        </button> */}
       </div>
     </div>
   );

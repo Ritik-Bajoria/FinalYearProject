@@ -37,6 +37,7 @@ from .system_log import SystemLog
 # ==== Postings ====
 from .admin_posting import AdminPosting
 from .volunteer_posting import VolunteerPosting 
+from .volunteer_applications import VolunteerApplication
 
 def init_models():
     """
@@ -50,7 +51,7 @@ def init_models():
         attendance, feedback, message, notification,
         event_budget, expense, system_log, event_document, 
         UserEventAssociation, EventAttendance, EventChat,
-        AdminPosting, VolunteerPosting, EventFeedback
+        AdminPosting, VolunteerPosting, EventFeedback, VolunteerApplication
     )
     db.configure_mappers()
 
@@ -98,6 +99,7 @@ __all__ = [
     # Postings
     'AdminPosting',
     'VolunteerPosting',
+    'VolunteerApplication',
     # Init
     'init_models'
 ]

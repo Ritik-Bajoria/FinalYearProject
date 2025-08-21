@@ -7,3 +7,7 @@ class VolunteerApplication(BaseModel):
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'))
     status = db.Column(db.String(20), default='pending')
     applied_at = db.Column(db.DateTime, default=db.func.now())
+
+    # Relationships
+    posting = db.relationship('VolunteerPosting', backref='applications')
+    user = db.relationship('User', backref='volunteer_applications')

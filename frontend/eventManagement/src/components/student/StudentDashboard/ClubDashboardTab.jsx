@@ -271,7 +271,7 @@ const ClubDashboard = ({ user }) => {
       {/* Notification Snackbar */}
       <Snackbar
         open={notification.open}
-        autoHideDuration={5000}
+        autoHideDuration={7000}
         onClose={handleCloseNotification}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >
