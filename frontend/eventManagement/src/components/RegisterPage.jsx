@@ -18,6 +18,13 @@ const RegisterPage = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+    
+    // Validate full_name to not contain numbers
+    if (name === 'full_name' && /\d/.test(value)) {
+      setError('Name cannot contain numbers');
+      return;
+    }
+    
     setFormData(prev => ({
       ...prev,
       [name]: value

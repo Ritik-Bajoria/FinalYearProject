@@ -10,3 +10,6 @@ class Expense(BaseModel):
     uploaded_by = db.Column(db.Integer, db.ForeignKey('users.user_id'))
     receipt_url = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    
+    # Relationships
+    uploader = db.relationship('User', backref='expenses')

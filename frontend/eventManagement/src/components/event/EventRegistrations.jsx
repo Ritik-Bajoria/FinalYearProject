@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Box, Typography, Button, Card, CardContent, 
   Table, TableBody, TableCell, TableContainer, 
@@ -11,7 +11,6 @@ import {
   People, Search, CheckCircle, Cancel,
   ArrowBack, ArrowForward, FilterList, Close
 } from '@mui/icons-material';
-import axios from 'axios';
 
 const statusOptions = [
   { value: 'pending', label: 'Pending', color: 'default' },
@@ -35,50 +34,94 @@ const EventRegistrations = ({ eventId, showNotification }) => {
     total: 0
   });
 
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:7000/api';
+
+  // Centralized API call handler
+  const apiCall = useCallback(async (endpoint, options = {}) => {
+    const token = localStorage.getItem('token');
+    try {
+      const headers = {
+        ...(options.body instanceof FormData
+          ? {} // don't set content-type for FormData
+          : { 'Content-Type': 'application/json' }),
+        ...(token && { Authorization: `Bearer ${token}` }),
+        ...(options.headers || {}),
+      };
+
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers,
+        body: options.body instanceof FormData ? options.body : JSON.stringify(options.body),
+      });
+
+      if (!response.ok) {
+        let errorMsg = `HTTP error! status: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMsg = errorData?.error || errorData?.message || errorMsg;
+        } catch {
+          // ignore non-JSON error body
+        }
+
+        // Handle expired/invalid token
+        if (response.status === 401 || response.status === 422) {
+          localStorage.removeItem('token');
+          window.location.href = '/login';
+        }
+
+        throw new Error(errorMsg);
+      }
+
+      const data = await response.json();
+      return data; // Return the full response, not just data.data
+    } catch (err) {
+      throw err;
+    }
+  }, [API_BASE_URL]);
+
   const fetchRegistrations = async () => {
     setLoading(true);
     setError(null);
     try {
-      const params = {
+      const params = new URLSearchParams({
         page: pagination.page,
         per_page: pagination.perPage,
-        search: searchTerm,
-        status: statusFilter !== 'all' ? statusFilter : undefined
-      };
-      
-      const response = await axios.get(`/api/events/${eventId}/registrations`, {
-        params,
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+        ...(searchTerm && { search: searchTerm }),
+        ...(statusFilter !== 'all' && { status: statusFilter })
       });
+
+      const response = await apiCall(`/events/${eventId}/registrations?${params}`);
       
-      setRegistrations(response.data.registrations);
+      // Fix: Extract data from the correct structure
+      const registrationData = response.data || [];
+      setRegistrations(registrationData);
+      
+      // Fix: Set total based on actual data length or a total_count if provided
       setPagination(prev => ({
         ...prev,
-        total: response.data.total_count
+        total: response.total_count || registrationData.length
       }));
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to fetch registrations');
-      showNotification('Failed to fetch registrations', 'error');
+      setError(err.message || 'Failed to fetch registrations');
+      showNotification(err.message || 'Failed to fetch registrations', 'error');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchRegistrations();
+    if (eventId) {
+      fetchRegistrations();
+    }
   }, [eventId, pagination.page, pagination.perPage, searchTerm, statusFilter]);
 
   const handleStatusUpdate = async () => {
     try {
-      await axios.put(
-        `/api/events/${eventId}/registrations/${editingRegistration.registration_id}`,
-        { status: selectedStatus },
+      await apiCall(
+        `/events/${eventId}/registrations/${editingRegistration.registration_id}`,
         {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
+          method: 'PUT',
+          body: { status: selectedStatus }
         }
       );
       
@@ -87,7 +130,7 @@ const EventRegistrations = ({ eventId, showNotification }) => {
       setEditingRegistration(null);
       fetchRegistrations();
     } catch (err) {
-      showNotification(err.response?.data?.error || 'Failed to update registration', 'error');
+      showNotification(err.message || 'Failed to update registration', 'error');
     }
   };
 
@@ -196,19 +239,22 @@ const EventRegistrations = ({ eventId, showNotification }) => {
                     <TableRow key={registration.registration_id}>
                       <TableCell>
                         <Box display="flex" alignItems="center" gap={2}>
-                          <Avatar src={registration.user.avatar_url}>
-                            {registration.user.full_name.charAt(0)}
+                          <Avatar>
+                            {registration.user_name?.charAt(0) || 'U'}
                           </Avatar>
                           <Box>
-                            <Typography>{registration.user.full_name}</Typography>
+                            <Typography>{registration.user_name || 'Unknown User'}</Typography>
                             <Typography variant="body2" color="text.secondary">
-                              {registration.user.email}
+                              {registration.user_email || 'No email'}
                             </Typography>
                           </Box>
                         </Box>
                       </TableCell>
                       <TableCell>
-                        {new Date(registration.registration_date).toLocaleDateString()}
+                        {registration.registration_date 
+                          ? new Date(registration.registration_date).toLocaleDateString()
+                          : 'N/A'
+                        }
                       </TableCell>
                       <TableCell>
                         <Chip 
@@ -279,7 +325,7 @@ const EventRegistrations = ({ eventId, showNotification }) => {
         <DialogContent>
           <Box sx={{ pt: 1, minWidth: 300 }}>
             <Typography variant="subtitle1" gutterBottom>
-              Attendee: {editingRegistration?.user.full_name}
+              Attendee: {editingRegistration?.user_name || 'Unknown User'}
             </Typography>
             <FormControl fullWidth margin="normal">
               <InputLabel>Status</InputLabel>

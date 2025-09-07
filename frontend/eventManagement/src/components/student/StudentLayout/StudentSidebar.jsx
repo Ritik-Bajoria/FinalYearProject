@@ -46,13 +46,14 @@ const StudentSidebar = ({ activeTab, setActiveTab, user }) => {
       label: 'My Events',
       icon: <EventIcon />,
       description: 'Your events'
-    },
-    {
-      id: 'analytics',
-      label: 'Analytics',
-      icon: <AnalyticsIcon />,
-      description: 'View insights'
     }
+    // ,
+    // {
+    //   id: 'analytics',
+    //   label: 'Analytics',
+    //   icon: <AnalyticsIcon />,
+    //   description: 'View insights'
+    // }
   ];
 
   return (

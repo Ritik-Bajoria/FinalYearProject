@@ -11,11 +11,12 @@ const useSocket = (clubId, userId) => {
         const token = localStorage.getItem('token');
         const newSocket = io('http://127.0.0.1:7000', {
             path: '/socket.io',
-            transports: ['websocket'],
+            transports: ['polling'],
+            upgrade: true,
             auth: { token },
             reconnection: true,
             reconnectionAttempts: 5,
-            reconnectionDelay: 1000,
+            reconnectionDelay: 1000
         });
 
         newSocket.on('connect', () => {
@@ -31,6 +32,7 @@ const useSocket = (clubId, userId) => {
         });
 
         newSocket.on('newMessage', (message) => {
+            console.log(message);
             setMessages(prev => [...prev, message]);
         });
 

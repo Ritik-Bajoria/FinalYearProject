@@ -7,7 +7,7 @@ const useEventApi = () => {
     error: null,
   });
 
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:7000';
 
   // Centralized API call handler
   const apiCall = useCallback(async (endpoint, options = {}) => {
@@ -121,15 +121,15 @@ const deleteEventDocument = useCallback(
   );
 
   const getEventChats = useCallback(
-    (eventId, chatType) => apiCall(`/events/${eventId}/chats/${chatType}`),
+    (eventId, chatType, page = 1, perPage = 50) => apiCall(`/events/${eventId}/chats/${chatType}/messages?page=${page}&per_page=${perPage}`),
     [apiCall]
   );
 
   const sendEventMessage = useCallback(
-    (eventId, chatType, message) =>
-      apiCall(`/events/${eventId}/chats/${chatType}`, {
+    (eventId, chatType, message, replyToId = null) =>
+      apiCall(`/events/${eventId}/chats/${chatType}/messages`, {
         method: 'POST',
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, reply_to: replyToId }),
       }),
     [apiCall]
   );

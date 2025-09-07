@@ -1,9 +1,45 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Calendar, MapPin, Users, Clock, Eye, CheckCircle, XCircle, MessageCircle, AlertCircle } from 'lucide-react';
 
-const EventCard = ({ event, onViewDetails, onApprove, onReject }) => {
+const EventCard = ({ event, onViewDetails, onApprove, onReject, userRole = 'admin' }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(null);
+  const [socket, setSocket] = useState(null);
+
+  // Initialize socket connection for admin users
+  useEffect(() => {
+    if (userRole === 'admin' && typeof window !== 'undefined' && window.io) {
+      const socketInstance = window.io();
+      
+      socketInstance.on('connect', () => {
+        console.log('Socket connected:', socketInstance.id);
+        
+        // Use admin authentication instead of regular authentication
+        const token = localStorage.getItem('token'); // Adjust based on your token storage
+        if (token) {
+          socketInstance.emit('admin_authenticate', { token });
+        }
+      });
+
+      socketInstance.on('admin_authenticated', (data) => {
+        console.log('Admin authenticated:', data);
+      });
+
+      socketInstance.on('auth_error', (error) => {
+        console.error('Admin authentication error:', error);
+      });
+
+      socketInstance.on('disconnect', () => {
+        console.log('Socket disconnected');
+      });
+
+      setSocket(socketInstance);
+
+      return () => {
+        socketInstance.disconnect();
+      };
+    }
+  }, [userRole]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -43,6 +79,31 @@ const EventCard = ({ event, onViewDetails, onApprove, onReject }) => {
   const handleReject = () => {
     onReject(event.event_id);
     setShowConfirmation(null);
+  };
+
+  const handleViewChat = () => {
+    if (socket && socket.connected) {
+      // Join event chat room
+      socket.emit('join_event_chat', {
+        event_id: event.event_id,
+        chat_type: 'organizer_admin'
+      });
+
+      socket.on('joined_chat', (data) => {
+        console.log('Joined chat:', data);
+        // Navigate to chat view or open chat modal
+        onViewDetails({ ...event, initialTab: 'chat' }, 'chat');
+      });
+
+      socket.on('error', (error) => {
+        console.error('Chat join error:', error);
+        // Fallback to regular view details
+        onViewDetails({ ...event, initialTab: 'chat' }, 'chat');
+      });
+    } else {
+      // Fallback if socket not connected
+      onViewDetails({ ...event, initialTab: 'chat' }, 'chat');
+    }
   };
 
   return (
@@ -155,6 +216,18 @@ const EventCard = ({ event, onViewDetails, onApprove, onReject }) => {
           </div>
         </div>
 
+        {/* Connection Status Indicator */}
+        {userRole === 'admin' && (
+          <div className="mb-4 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center text-sm">
+              <div className={`w-2 h-2 rounded-full mr-2 ${socket?.connected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+              <span className="text-blue-700">
+                Socket: {socket?.connected ? 'Connected' : 'Disconnected'}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Confirmation Modal */}
         {showConfirmation && (
           <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
@@ -205,7 +278,7 @@ const EventCard = ({ event, onViewDetails, onApprove, onReject }) => {
               View Details
             </button>
             <button
-              onClick={() => onViewDetails(event, 'chat')}
+              onClick={handleViewChat}
               className="flex-1 flex items-center justify-center px-4 py-2.5 text-sm font-medium text-slate-700 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 hover:border-slate-300 transition-all duration-200"
             >
               <MessageCircle className="w-4 h-4 mr-2" />
@@ -252,4 +325,5 @@ const EventCard = ({ event, onViewDetails, onApprove, onReject }) => {
     </div>
   );
 };
+
 export default EventCard;

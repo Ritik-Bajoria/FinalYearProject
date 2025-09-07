@@ -38,11 +38,11 @@ const EventManagement = () => {
       }).toString();
 
       const data = await apiCall(`/admin/events?${queryParams}`);
-      setEvents(data.events || []);
+      setEvents(data.data.events || []);
       setPagination({
-        total: data.total,
-        pages: data.pages,
-        currentPage: data.currentPage
+        total: data.data.total,
+        pages: data.data.pages,
+        currentPage: data.data.currentPage
       });
     } catch (err) {
       console.error('Failed to fetch events:', err);

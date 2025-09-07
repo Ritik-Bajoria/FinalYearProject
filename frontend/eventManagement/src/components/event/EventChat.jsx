@@ -1,4 +1,3 @@
-// components/EventChat.js
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
     Box,
@@ -30,14 +29,16 @@ import {
     CopyAll as CopyIcon,
     PushPin as PinIcon
 } from '@mui/icons-material';
-import useEventChat from '../hooks/useEventChat';
+import useEventSocket from '../hooks/useEventSocket';
 
 const EventChat = ({ eventId, userRole, eventStatus, showNotification, currentUser }) => {
-    // const [activeChat, setActiveChat] = useState('');
     const [anchorEl, setAnchorEl] = useState(null);
     const [selectedMessage, setSelectedMessage] = useState(null);
+    const [newMessage, setNewMessage] = useState('');
+    const [replyTo, setReplyTo] = useState(null);
+    const [activeChat, setActiveChat] = useState(null);
     const messagesEndRef = useRef(null);
-
+    
     // Determine available chat types based on user role
     const getAvailableChats = () => {
         const chats = [];
@@ -45,63 +46,81 @@ const EventChat = ({ eventId, userRole, eventStatus, showNotification, currentUs
         if (userRole === 'organizer') {
             chats.push(
                 { type: 'organizer_admin', label: 'Admin Chat', icon: <AdminIcon /> },
-                { type: 'organizer_volunteer', label: 'Organizer & Volunteers', icon: <VolunteerIcon /> }
+                { type: 'organizer_volunteer', label: 'Volunteer Chat', icon: <VolunteerIcon /> }
             );
         } else if (userRole === 'volunteer') {
             chats.push(
-                { type: 'organizer_volunteer', label: 'Organizer & Volunteers', icon: <VolunteerIcon /> }
+                { type: 'organizer_volunteer', label: 'Chat with Organizers', icon: <VolunteerIcon /> }
             );
         } else if (userRole === 'attendee') {
             chats.push(
                 { type: 'attendee_only', label: 'Attendees Chat', icon: <PeopleIcon /> }
             );
         }
-        
         return chats;
     };
+
     const availableChats = getAvailableChats();
-
-    const [activeChat, setActiveChat] = useState(
-    availableChats.length > 0 ? availableChats[0].type : ''
-    );
-
-    // const availableChats = getAvailableChats();
-
-    // Use the event chat hook
-    const {
-        messages,
-        newMessage,
-        setNewMessage,
-        replyTo,
-        setReplyTo,
-        handleSendMessage,
-        loading,
-        isConnected,
-        typingUsers,
-        isSending,
-        error
-    } = useEventChat(eventId, activeChat, currentUser);
     
+    // Set default active chat based on available chats
+    useEffect(() => {
+        if (availableChats.length > 0 && !activeChat) {
+            setActiveChat(availableChats[0].type);
+        }
+    }, [availableChats, activeChat]);
 
-    // useEffect(() => {
-    //     if (availableChats.length > 0 && !activeChat) {
-    //         setActiveChat(availableChats[0].type);
-    //     }
-    // }, [availableChats]);
-
+    // Use the custom hook
+    const {
+        socket,
+        isConnected,
+        messages,
+        isLoading,
+        typingUsers,
+        connectionError,
+        sendRealTimeMessage,
+        sendTypingStatus,
+        loadInitialMessages
+    } = useEventSocket(eventId, activeChat, currentUser?.user_id);
+    console.log("messages recieved",messages)
+    // Show connection errors as notifications
+    useEffect(() => {
+        if (connectionError) {
+            showNotification(connectionError, 'error');
+        }
+    }, [connectionError, showNotification]);
+    
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
 
-    useEffect(() => {
-        if (error) {
-            showNotification(error, 'error');
-        }
-    }, [error, showNotification]);
-
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
+
+    const handleSendMessage = async () => {
+        if (!newMessage.trim() || !activeChat) return;
+
+        try {
+            const messageData = {
+                message: newMessage.trim(),
+                reply_to_id: replyTo?.id
+            };
+
+            await sendRealTimeMessage(messageData);
+            setNewMessage('');
+            setReplyTo(null);
+            
+            // Stop typing indicator
+            sendTypingStatus(false);
+        } catch (err) {
+            console.error('Failed to send message:', err);
+            showNotification(err.message || 'Failed to send message', 'error');
+        }
+    };
+
+    const handleTyping = useCallback((isTyping) => {
+        sendTypingStatus(isTyping);
+    }, [sendTypingStatus]);
 
     const handleKeyPress = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -110,26 +129,11 @@ const EventChat = ({ eventId, userRole, eventStatus, showNotification, currentUs
         }
     };
 
-    // const handleSendMessage = async () => {
-    //     const success = await sendMessage();
-    //     if (success) {
-    //         showNotification('Message sent successfully', 'success');
-    //     } else {
-    //         showNotification('Failed to send message', 'error');
-    //     }
-    // };
-//       const handleSendMessage = useCallback(async () => {
-//         console.log('Sending message:', newMessage, 'Reply to:', replyTo);
-//     if (!newMessage.trim()) return;
-    
-//     const success = await sendMessage(newMessage, replyTo?.id);
-//     if (success) {
-//       setNewMessage('');
-//       setReplyTo(null);
-//       handleTyping(false);
-//     }
-//     return success;
-//   }, [newMessage, replyTo, sendMessage, handleTyping]);
+    const handleInputChange = (e) => {
+        setNewMessage(e.target.value);
+        // Start typing indicator with debounce
+        handleTyping(true);
+    };
 
     const formatTimestamp = (timestamp) => {
         const date = new Date(timestamp);
@@ -170,6 +174,15 @@ const EventChat = ({ eventId, userRole, eventStatus, showNotification, currentUs
     }
 
     const isOthersTyping = typingUsers.length > 0;
+
+    // Don't render tabs until activeChat is set
+    if (!activeChat) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                <CircularProgress />
+            </Box>
+        );
+    }
 
     return (
         <Box sx={{ height: '600px', display: 'flex', flexDirection: 'column' }}>
@@ -261,7 +274,7 @@ const EventChat = ({ eventId, userRole, eventStatus, showNotification, currentUs
                         position: 'relative'
                     }}
                 >
-                    {loading ? (
+                    {isLoading ? (
                         <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
                             <CircularProgress />
                         </Box>
@@ -279,7 +292,7 @@ const EventChat = ({ eventId, userRole, eventStatus, showNotification, currentUs
                         <List sx={{ p: 0 }}>
                             {messages.map((message) => (
                                 <ListItem
-                                    key={message.id || message.message_id}
+                                    key={message.id || `${message.sender_id}-${message.timestamp}`}
                                     sx={{
                                         flexDirection: 'column',
                                         alignItems: 'flex-start',
@@ -310,7 +323,7 @@ const EventChat = ({ eventId, userRole, eventStatus, showNotification, currentUs
                                             />
                                         )}
                                         <Typography variant="caption" sx={{ ml: 'auto', color: 'text.secondary' }}>
-                                            {formatTimestamp(message.timestamp || message.sent_at)}
+                                            {formatTimestamp(message.timestamp || message.created_at)}
                                         </Typography>
                                         <IconButton
                                             size="small"
@@ -323,28 +336,6 @@ const EventChat = ({ eventId, userRole, eventStatus, showNotification, currentUs
                                             <MoreIcon fontSize="small" />
                                         </IconButton>
                                     </Box>
-                                    
-                                    {/* Reply context */}
-                                    {message.reply_to_message && (
-                                        <Box
-                                            sx={{
-                                                ml: 5,
-                                                mb: 1,
-                                                p: 1,
-                                                backgroundColor: 'rgba(0, 0, 0, 0.04)',
-                                                borderRadius: 1,
-                                                borderLeft: '3px solid',
-                                                borderColor: 'primary.main'
-                                            }}
-                                        >
-                                            <Typography variant="caption" sx={{ fontWeight: 600, display: 'block' }}>
-                                                {message.reply_to_message.sender_name}
-                                            </Typography>
-                                            <Typography variant="caption" sx={{ fontStyle: 'italic' }}>
-                                                {message.reply_to_message.message}
-                                            </Typography>
-                                        </Box>
-                                    )}
                                     
                                     <Paper
                                         sx={{
@@ -359,7 +350,7 @@ const EventChat = ({ eventId, userRole, eventStatus, showNotification, currentUs
                                         }}
                                     >
                                         <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                                            {message.message || message.message_text}
+                                            {message.message}
                                         </Typography>
                                     </Paper>
                                 </ListItem>
@@ -420,20 +411,20 @@ const EventChat = ({ eventId, userRole, eventStatus, showNotification, currentUs
                                 multiline
                                 maxRows={3}
                                 value={newMessage}
-                                onChange={(e) => setNewMessage(e.target.value)}
+                                onChange={handleInputChange}
                                 onKeyPress={handleKeyPress}
                                 placeholder={replyTo ? `Reply to ${replyTo.sender_name}...` : "Type your message..."}
-                                disabled={isSending}
+                                disabled={!isConnected}
                                 variant="outlined"
                                 size="small"
                             />
                             <Button
                                 variant="contained"
                                 onClick={handleSendMessage}
-                                disabled={!newMessage.trim() || isSending}
+                                disabled={!newMessage.trim() || !isConnected}
                                 sx={{ minWidth: 'auto', px: 2 }}
                             >
-                                {isSending ? <CircularProgress size={20} /> : <SendIcon />}
+                                <SendIcon />
                             </Button>
                         </Box>
                         <Typography variant="caption" sx={{ color: 'text.secondary', mt: 1, display: 'block' }}>

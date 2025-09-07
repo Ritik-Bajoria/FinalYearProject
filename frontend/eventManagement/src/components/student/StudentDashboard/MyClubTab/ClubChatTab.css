@@ -557,13 +557,13 @@
   font-size: 0.875rem;
 }
 
-.club-chat-textarea:focus {
+/* .club-chat-textarea:focus {
   outline: none;
   ring: 2px;
   ring-color: #3b82f6;
   border-color: #3b82f6;
   background-color: white;
-}
+} */
 
 .club-chat-textarea::placeholder {
   color: #64748b;

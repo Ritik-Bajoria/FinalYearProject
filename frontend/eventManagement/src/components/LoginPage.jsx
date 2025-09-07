@@ -32,12 +32,15 @@ const LoginPage = () => {
         localStorage.setItem('token', data.data.token);
         localStorage.setItem('user', JSON.stringify(data.data.user));
         if (data.data.student) {
+          localStorage.setItem('userRole','student')
           localStorage.setItem('student', JSON.stringify(data.data.student));
           navigate('/student/dashboard');
         } else if (data.data.faculty) {
+          localStorage.setItem('userRole','student')
           localStorage.setItem('faculty', JSON.stringify(data.data.faculty));
           navigate('/faculty/dashboard');
         } else if (data.data.admin) {
+          localStorage.setItem('userRole','admin')
           localStorage.setItem('admin', JSON.stringify(data.data.admin));
           navigate('/admin/dashboard');
         }

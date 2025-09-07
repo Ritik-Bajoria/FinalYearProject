@@ -21,12 +21,13 @@ def create_app():
     socketio.init_app(app, 
                      cors_allowed_origins="*",
                      async_mode='threading',
-                     logger=True,
-                     engineio_logger=True,
+                     logger=False,
+                     engineio_logger=False,
                      ping_timeout=60,
                      ping_interval=25,
                      transports=['polling', 'websocket'],
-                     allow_upgrades=True)
+                     allow_upgrades=True,
+                     manage_session=False)
     
     with app.app_context():
         # Import all models to ensure they're registered
@@ -63,6 +64,9 @@ def create_app():
         from Backend.routes.club_dashboard_api import club_dashboard_api
         from Backend.routes.notifications import notifications_bp
         from Backend.routes.socialApi import social_bp
+        from Backend.routes.volunteer_postings import volunteer_postings_bp
+        from Backend.routes.my_events import my_events_bp
+        from Backend.routes.attendance import attendance_bp
         
         # Register swagger blueprint
         from Backend.utils.swagger import swagger_blueprint, create_swagger_json
@@ -82,6 +86,9 @@ def create_app():
         app.register_blueprint(my_club_api, url_prefix='/api')
         app.register_blueprint(club_dashboard_api, url_prefix='/api')
         app.register_blueprint(notifications_bp, url_prefix='/api')
+        app.register_blueprint(volunteer_postings_bp, url_prefix='/api')
+        app.register_blueprint(my_events_bp, url_prefix='/api')
+        app.register_blueprint(attendance_bp, url_prefix='/api')
         
         # Import socket handlers after app initialization to register event handlers
         from Backend import socket_handlers

@@ -31,12 +31,13 @@ const VolunteerPostings = ({ eventId, showNotification }) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.get(`/api/events/${eventId}/volunteer-postings`, {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:7000/api';
+      const response = await axios.get(`${API_BASE_URL}/events/${eventId}/volunteer-postings`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
-      setPostings(response.data);
+      setPostings(Array.isArray(response.data) ? response.data : response.data.data || []);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to fetch volunteer postings');
       showNotification('Failed to fetch volunteer postings', 'error');
@@ -59,24 +60,27 @@ const VolunteerPostings = ({ eventId, showNotification }) => {
 
   const handleSubmit = async () => {
     try {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:7000/api';
       if (editingPosting) {
         await axios.put(
-          `/api/events/${eventId}/volunteer-postings/${editingPosting.posting_id}`,
+          `${API_BASE_URL}/events/${eventId}/volunteer-postings/${editingPosting.posting_id}`,
           formData,
           {
             headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`
+              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+              'Content-Type': 'application/json'
             }
           }
         );
         showNotification('Volunteer posting updated successfully', 'success');
       } else {
         await axios.post(
-          `/api/events/${eventId}/volunteer-postings`,
+          `${API_BASE_URL}/events/${eventId}/volunteer-postings`,
           formData,
           {
             headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`
+              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+              'Content-Type': 'application/json'
             }
           }
         );
@@ -103,8 +107,9 @@ const VolunteerPostings = ({ eventId, showNotification }) => {
 
   const handleDelete = async () => {
     try {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:7000/api';
       await axios.delete(
-        `/api/events/${eventId}/volunteer-postings/${confirmDelete.posting_id}`,
+        `${API_BASE_URL}/events/${eventId}/volunteer-postings/${confirmDelete.posting_id}`,
         {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`

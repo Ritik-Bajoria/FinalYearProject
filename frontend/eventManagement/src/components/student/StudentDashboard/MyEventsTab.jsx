@@ -2,68 +2,59 @@ import React, { useState, useEffect } from 'react';
 import { 
   Box, 
   Typography, 
-  Tabs, 
-  Tab, 
   Card, 
   CardContent, 
-  List, 
-  ListItem, 
-  ListItemText, 
-  Avatar,
-  Chip,
-  Button,
-  Grid,
+  Grid, 
+  Button, 
+  Chip, 
+  Stack,
+  FormControl,
+  Select,
+  MenuItem,
+  InputLabel,
+  TextField,
+  InputAdornment,
   CircularProgress
 } from '@mui/material';
-import {
-  Event as EventIcon,
-  CheckCircle as CheckCircleIcon,
-  VolunteerActivism as VolunteerIcon,
-  HowToReg as OrganizerIcon
+import { 
+  Event as EventIcon, 
+  LocationOn, 
+  CalendarToday,
+  Schedule,
+  People,
+  CheckCircle,
+  VolunteerActivism,
+  HowToReg as OrganizerIcon,
+  Search as SearchIcon
 } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import OrganizeEventDialog from './OrganizeEventDialog';
 
 const MyEventsTab = ({ user }) => {
-  const [activeSubTab, setActiveSubTab] = useState('upcoming');
-  const [events, setEvents] = useState({
-    upcoming: [],
-    past: [],
-    asVolunteer: [],
-    asOrganizer: []
-  });
+  const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [filter, setFilter] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchEvents = async () => {
       try {
         setLoading(true);
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:7000/api';
+        const headers = {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        };
         
-        // Fetch all event types in parallel
-        const [upcomingResponse, pastResponse, volunteerResponse, organizerResponse] = await Promise.all([
-          axios.get('/api/events/my-events/upcoming'),
-          axios.get('/api/events/my-events/past'),
-          axios.get('/api/events/my-events/volunteer'),
-          axios.get('/api/events/my-events/organizer')
-        ]);
+        // Fetch all events
+        const response = await axios.get(`${API_BASE_URL}/events/my-events`, { headers });
         
-        setEvents({
-          upcoming: Array.isArray(upcomingResponse?.data) ? upcomingResponse.data : [],
-          past: Array.isArray(pastResponse?.data) ? pastResponse.data : [],
-          asVolunteer: Array.isArray(volunteerResponse?.data) ? volunteerResponse.data : [],
-          asOrganizer: Array.isArray(organizerResponse?.data) ? organizerResponse.data : []
-        });
-        
+        setEvents(Array.isArray(response?.data) ? response.data : []);
         setError(null);
       } catch (err) {
         setError(err.message);
-        setEvents({
-          upcoming: [],
-          past: [],
-          asVolunteer: [],
-          asOrganizer: []
-        });
+        setEvents([]);
       } finally {
         setLoading(false);
       }
@@ -75,15 +66,67 @@ const MyEventsTab = ({ user }) => {
   const renderRoleChip = (role) => {
     switch(role) {
       case 'attendee':
-        return <Chip icon={<CheckCircleIcon />} label="Attendee" color="success" size="small" />;
+        return <Chip icon={<CheckCircle />} label="Attendee" color="success" size="small" />;
       case 'volunteer':
-        return <Chip icon={<VolunteerIcon />} label="Volunteer" color="info" size="small" />;
+        return <Chip icon={<VolunteerActivism />} label="Volunteer" color="info" size="small" />;
       case 'organizer':
         return <Chip icon={<OrganizerIcon />} label="Organizer" color="warning" size="small" />;
       default:
         return null;
     }
   };
+
+  const getEventStatus = (eventDate) => {
+    const now = new Date();
+    const eventDateObj = new Date(eventDate);
+    return eventDateObj > now ? 'upcoming' : 'past';
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'TBD';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  const formatTime = (dateString) => {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
+  const handleEventClick = (eventId) => {
+    navigate(`/events/${eventId}`);
+  };
+
+  // Filter events based on selected filter and search term
+  const filteredEvents = events.filter(event => {
+    // Filter by event type
+    if (filter !== 'all') {
+      if (filter === 'upcoming' && getEventStatus(event.event_date) !== 'upcoming') return false;
+      if (filter === 'past' && getEventStatus(event.event_date) !== 'past') return false;
+      if (filter === 'organizer' && event.participation_role !== 'organizer') return false;
+      if (filter === 'volunteer' && event.participation_role !== 'volunteer') return false;
+    }
+
+    // Filter by search term
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      return (
+        event.title?.toLowerCase().includes(searchLower) ||
+        event.description?.toLowerCase().includes(searchLower) ||
+        event.venue?.toLowerCase().includes(searchLower) ||
+        event.participation_role?.toLowerCase().includes(searchLower)
+      );
+    }
+
+    return true;
+  });
 
   if (loading) {
     return (
@@ -105,186 +148,198 @@ const MyEventsTab = ({ user }) => {
     <Box sx={{ p: 2 }}>
       <Typography variant="h4" sx={{ mb: 3 }}>My Events</Typography>
       
-      <Tabs 
-        value={activeSubTab} 
-        onChange={(e, newValue) => setActiveSubTab(newValue)}
-        sx={{ mb: 3 }}
-      >
-        <Tab label="Upcoming" value="upcoming" />
-        <Tab label="Past" value="past" />
-        <Tab label="As Volunteer" value="asVolunteer" />
-        <Tab label="As Organizer" value="asOrganizer" />
-      </Tabs>
+      {/* Filters and Search */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, gap: 2, flexWrap: 'wrap' }}>
+        {/* Filter Dropdown */}
+        <FormControl size="small" sx={{ minWidth: 120 }}>
+          <InputLabel>Filter</InputLabel>
+          <Select
+            value={filter}
+            label="Filter"
+            onChange={(e) => setFilter(e.target.value)}
+          >
+            <MenuItem value="all">All Events</MenuItem>
+            <MenuItem value="upcoming">Upcoming</MenuItem>
+            <MenuItem value="past">Past</MenuItem>
+            <MenuItem value="organizer">As Organizer</MenuItem>
+            <MenuItem value="volunteer">As Volunteer</MenuItem>
+          </Select>
+        </FormControl>
 
-      {activeSubTab === 'upcoming' && (
-        <Box>
-          <Typography variant="h5" sx={{ mb: 2 }}>Upcoming Events</Typography>
-          {events.upcoming.length === 0 ? (
-            <Typography>You have no upcoming events.</Typography>
-          ) : (
-            <List>
-              {events.upcoming.map(event => (
-                <Card key={event.event_id} sx={{ mb: 2 }}>
-                  <CardContent>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="h6">{event.title}</Typography>
-                      {renderRoleChip(event.participation_role)}
-                    </Box>
-                    <Typography color="textSecondary" sx={{ mb: 1 }}>
-                      {new Date(event.event_date).toLocaleString()} at {event.venue}
-                    </Typography>
-                    <Typography sx={{ mb: 1 }}>
-                      {event.description?.substring(0, 100)}...
-                    </Typography>
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <Button 
-                        variant="outlined" 
-                        size="small"
-                        sx={{ color: '#0D47A1', borderColor: '#0D47A1', mr: 1 }}
-                      >
-                        View Details
-                      </Button>
-                      <Button 
-                        variant="contained" 
-                        size="small"
-                        sx={{ backgroundColor: '#d32f2f', '&:hover': { backgroundColor: '#b71c1c' } }}
-                      >
-                        Cancel
-                      </Button>
-                    </Box>
-                  </CardContent>
-                </Card>
-              ))}
-            </List>
-          )}
-        </Box>
-      )}
+        {/* Search */}
+        <TextField
+          placeholder="Search events..."
+          variant="outlined"
+          size="small"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon color="action" fontSize="small" />
+              </InputAdornment>
+            ),
+          }}
+          sx={{ flexGrow: 1, maxWidth: 300 }}
+        />
+      </Box>
 
-      {activeSubTab === 'past' && (
-        <Box>
-          <Typography variant="h5" sx={{ mb: 2 }}>Past Events</Typography>
-          {events.past.length === 0 ? (
-            <Typography>You have no past events.</Typography>
-          ) : (
-            <List>
-              {events.past.map(event => (
-                <Card key={event.event_id} sx={{ mb: 2 }}>
-                  <CardContent>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="h6">{event.title}</Typography>
-                      {renderRoleChip(event.participation_role)}
-                    </Box>
-                    <Typography color="textSecondary" sx={{ mb: 1 }}>
-                      {new Date(event.event_date).toLocaleString()} at {event.venue}
-                    </Typography>
-                    <Typography sx={{ mb: 1 }}>
-                      {event.description?.substring(0, 100)}...
-                    </Typography>
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <Button 
-                        variant="outlined" 
-                        size="small"
-                        sx={{ color: '#0D47A1', borderColor: '#0D47A1', mr: 1 }}
-                      >
-                        View Details
-                      </Button>
-                      <Button 
-                        variant="contained" 
-                        size="small"
-                        sx={{ backgroundColor: '#0D47A1', '&:hover': { backgroundColor: '#1A237E' } }}
-                      >
-                        Give Feedback
-                      </Button>
-                    </Box>
-                  </CardContent>
-                </Card>
-              ))}
-            </List>
-          )}
+      {/* Events Grid */}
+      {filteredEvents.length === 0 ? (
+        <Box textAlign="center" py={4}>
+          <Typography variant="h6" color="text.secondary">
+            {searchTerm || filter !== 'all' 
+              ? 'No matching events found' 
+              : 'You have no events yet'
+            }
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            {searchTerm || filter !== 'all' 
+              ? 'Try adjusting your search or filters' 
+              : 'Join or organize events to see them here'
+            }
+          </Typography>
         </Box>
-      )}
+      ) : (
+        <Grid container spacing={2}>
+          {filteredEvents.map(event => (
+            <Grid item xs={12} sm={6} md={4} key={event.event_id}>
+              <Card 
+                sx={{ 
+                  height: '100%', 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease-in-out',
+                  border: '1px solid',
+                  borderColor: 'grey.200',
+                  borderRadius: 2,
+                  '&:hover': { 
+                    transform: 'translateY(-2px)',
+                    boxShadow: 3,
+                    borderColor: 'primary.light'
+                  }
+                }}
+                onClick={() => handleEventClick(event.event_id)}
+              >
+                <CardContent sx={{ p: 2 }}>
+                  {/* Status and Role Chips */}
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1.5 }}>
+                    <Chip 
+                      label={getEventStatus(event.event_date) === 'upcoming' ? 'Upcoming' : 'Past'} 
+                      size="small" 
+                      color={getEventStatus(event.event_date) === 'upcoming' ? 'primary' : 'default'}
+                      variant="filled"
+                    />
+                    {renderRoleChip(event.participation_role)}
+                  </Box>
 
-      {activeSubTab === 'asVolunteer' && (
-        <Box>
-          <Typography variant="h5" sx={{ mb: 2 }}>Events as Volunteer</Typography>
-          {events.asVolunteer.length === 0 ? (
-            <Typography>You are not volunteering for any events.</Typography>
-          ) : (
-            <List>
-              {events.asVolunteer.map(event => (
-                <Card key={event.event_id} sx={{ mb: 2 }}>
-                  <CardContent>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="h6">{event.title}</Typography>
-                      <Chip icon={<VolunteerIcon />} label={event.volunteer_role} color="info" size="small" />
-                    </Box>
-                    <Typography color="textSecondary" sx={{ mb: 1 }}>
-                      {new Date(event.event_date).toLocaleString()} at {event.venue}
-                    </Typography>
-                    <Typography sx={{ mb: 1 }}>{event.volunteer_description}</Typography>
-                    <Typography variant="body2" sx={{ mb: 1 }}>
-                      <strong>Your responsibilities:</strong> {event.responsibilities}
-                    </Typography>
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <Button 
-                        variant="outlined" 
-                        size="small"
-                        sx={{ color: '#0D47A1', borderColor: '#0D47A1', mr: 1 }}
-                      >
-                        View Details
-                      </Button>
-                    </Box>
-                  </CardContent>
-                </Card>
-              ))}
-            </List>
-          )}
-        </Box>
-      )}
+                  {/* Event Title */}
+                  <Typography 
+                    variant="subtitle1" 
+                    component="h3"
+                    sx={{ 
+                      fontWeight: 600,
+                      mb: 1.5,
+                      fontSize: '0.95rem',
+                      lineHeight: 1.3,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      minHeight: '2.6em'
+                    }}
+                  >
+                    {event.title}
+                  </Typography>
 
-      {activeSubTab === 'asOrganizer' && (
-        <Box>
-          <Typography variant="h5" sx={{ mb: 2 }}>Events as Organizer</Typography>
-          {events.asOrganizer.length === 0 ? (
-            <Typography>You are not organizing any events.</Typography>
-          ) : (
-            <List>
-              {events.asOrganizer.map(event => (
-                <Card key={event.event_id} sx={{ mb: 2 }}>
-                  <CardContent>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="h6">{event.title}</Typography>
-                      <Chip icon={<OrganizerIcon />} label="Organizer" color="warning" size="small" />
+                  {/* Event Details */}
+                  <Stack spacing={0.8} sx={{ mb: 1.5 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <CalendarToday sx={{ fontSize: 14, mr: 0.75, color: 'text.secondary' }} />
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                        {formatDate(event.event_date)}
+                      </Typography>
                     </Box>
-                    <Typography color="textSecondary" sx={{ mb: 1 }}>
-                      {new Date(event.event_date).toLocaleString()} at {event.venue}
-                    </Typography>
-                    <Typography sx={{ mb: 1 }}>{event.description?.substring(0, 100)}...</Typography>
-                    <Typography variant="body2" sx={{ mb: 1 }}>
-                      <strong>Status:</strong> {event.status} | <strong>Attendees:</strong> {event.attendee_count}
-                    </Typography>
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <Button 
-                        variant="outlined" 
-                        size="small"
-                        sx={{ color: '#0D47A1', borderColor: '#0D47A1', mr: 1 }}
-                      >
-                        View Details
-                      </Button>
-                      <Button 
-                        variant="contained" 
-                        size="small"
-                        sx={{ backgroundColor: '#0D47A1', '&:hover': { backgroundColor: '#1A237E' } }}
-                      >
-                        Manage Event
-                      </Button>
+
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Schedule sx={{ fontSize: 14, mr: 0.75, color: 'text.secondary' }} />
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                        {formatTime(event.event_date)}
+                        {event.duration_minutes && ` (${event.duration_minutes}m)`}
+                      </Typography>
                     </Box>
-                  </CardContent>
-                </Card>
-              ))}
-            </List>
-          )}
-        </Box>
+
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <LocationOn sx={{ fontSize: 14, mr: 0.75, color: 'text.secondary' }} />
+                      <Typography 
+                        variant="caption" 
+                        color="text.secondary" 
+                        sx={{ 
+                          fontSize: '0.75rem',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 1,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden'
+                        }}
+                      >
+                        {event.venue || 'Venue TBD'}
+                      </Typography>
+                    </Box>
+
+                    {event.registration_count !== undefined && (
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <People sx={{ fontSize: 14, mr: 0.75, color: 'text.secondary' }} />
+                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                          {event.registration_count} registered
+                          {event.capacity && ` / ${event.capacity}`}
+                        </Typography>
+                      </Box>
+                    )}
+                  </Stack>
+
+                  {/* Description Preview */}
+                  {event.description && (
+                    <Typography 
+                      variant="body2" 
+                      color="text.secondary"
+                      sx={{ 
+                        mt: 1.5,
+                        fontSize: '0.75rem',
+                        lineHeight: 1.4,
+                        display: '-webkit-box',
+                        WebkitLineClamp: 3,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden'
+                      }}
+                    >
+                      {event.description}
+                    </Typography>
+                  )}
+
+                  {/* View Details Button */}
+                  <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button 
+                      variant="outlined" 
+                      size="small"
+                      sx={{ 
+                        color: '#0D47A1', 
+                        borderColor: '#0D47A1',
+                        fontSize: '0.75rem'
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEventClick(event.event_id);
+                      }}
+                    >
+                      View Details
+                    </Button>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
       )}
     </Box>
   );

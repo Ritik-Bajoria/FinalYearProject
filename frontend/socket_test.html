@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Socket.IO Test</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .log { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .error { background: #ffebee; color: #c62828; }
+        .success { background: #e8f5e8; color: #2e7d32; }
+        .info { background: #e3f2fd; color: #1565c0; }
+        button { margin: 5px; padding: 10px; }
+        input { margin: 5px; padding: 5px; width: 300px; }
+    </style>
+</head>
+<body>
+    <h1>Socket.IO Connection Test</h1>
+    
+    <div>
+        <input type="text" id="tokenInput" placeholder="Enter admin token" />
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+    </div>
+    
+    <div>
+        <input type="number" id="eventIdInput" placeholder="Event ID" value="5" />
+        <button onclick="joinEventChat()">Join Event Chat</button>
+    </div>
+    
+    <div>
+        <input type="text" id="messageInput" placeholder="Test message" value="Hello from test!" />
+        <button onclick="sendMessage()">Send Message</button>
+    </div>
+    
+    <div>
+        <button onclick="clearLogs()">Clear Logs</button>
+    </div>
+    
+    <div id="logs"></div>
+
+    <script>
+        let socket = null;
+        let isConnected = false;
+        let isAuthenticated = false;
+
+        function log(message, type = 'info') {
+            const logs = document.getElementById('logs');
+            const logDiv = document.createElement('div');
+            logDiv.className = `log ${type}`;
+            logDiv.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logs.appendChild(logDiv);
+            logs.scrollTop = logs.scrollHeight;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        function connect() {
+            const token = document.getElementById('tokenInput').value;
+            if (!token) {
+                log('Please enter a token', 'error');
+                return;
+            }
+
+            log('Connecting to server...', 'info');
+            
+            socket = io('http://127.0.0.1:7000', {
+                path: '/socket.io',
+                transports: ['polling', 'websocket'],
+                auth: { token },
+                reconnection: true,
+                reconnectionAttempts: 5,
+                reconnectionDelay: 1000,
+                timeout: 20000,
+                autoConnect: true,
+                upgrade: true
+            });
+
+            socket.on('connect', () => {
+                log('✅ Connected to server', 'success');
+                isConnected = true;
+                
+                // Authenticate
+                log('🔐 Authenticating...', 'info');
+                socket.emit('authenticate', { token });
+            });
+
+            socket.on('disconnect', (reason) => {
+                log(`❌ Disconnected: ${reason}`, 'error');
+                isConnected = false;
+                isAuthenticated = false;
+            });
+
+            socket.on('connect_error', (error) => {
+                log(`❌ Connection error: ${error.message}`, 'error');
+            });
+
+            socket.on('authenticated', (data) => {
+                log(`✅ Authenticated: ${JSON.stringify(data)}`, 'success');
+                isAuthenticated = true;
+            });
+
+            socket.on('auth_error', (data) => {
+                log(`❌ Auth error: ${JSON.stringify(data)}`, 'error');
+            });
+
+            socket.on('joined_chat', (data) => {
+                log(`✅ Joined chat: ${JSON.stringify(data)}`, 'success');
+            });
+
+            socket.on('new_event_message', (data) => {
+                log(`📨 New message: ${JSON.stringify(data)}`, 'info');
+            });
+
+            socket.on('error', (data) => {
+                log(`❌ Socket error: ${JSON.stringify(data)}`, 'error');
+            });
+        }
+
+        function disconnect() {
+            if (socket) {
+                socket.disconnect();
+                log('🔌 Disconnected from server', 'info');
+            }
+        }
+
+        function joinEventChat() {
+            if (!isAuthenticated) {
+                log('❌ Not authenticated', 'error');
+                return;
+            }
+
+            const eventId = parseInt(document.getElementById('eventIdInput').value);
+            if (!eventId) {
+                log('❌ Please enter event ID', 'error');
+                return;
+            }
+
+            log(`🎉 Joining event chat: ${eventId}`, 'info');
+            socket.emit('join_event_chat', {
+                event_id: eventId,
+                chat_type: 'organizer_admin'
+            });
+        }
+
+        function sendMessage() {
+            if (!isAuthenticated) {
+                log('❌ Not authenticated', 'error');
+                return;
+            }
+
+            const eventId = parseInt(document.getElementById('eventIdInput').value);
+            const message = document.getElementById('messageInput').value;
+            
+            if (!eventId || !message) {
+                log('❌ Please enter event ID and message', 'error');
+                return;
+            }
+
+            log(`📤 Sending message: ${message}`, 'info');
+            socket.emit('send_event_message', {
+                event_id: eventId,
+                chat_type: 'organizer_admin',
+                message: message
+            }, (response) => {
+                if (response && response.error) {
+                    log(`❌ Message error: ${response.error}`, 'error');
+                } else {
+                    log(`✅ Message sent: ${JSON.stringify(response)}`, 'success');
+                }
+            });
+        }
+
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '';
+        }
+
+        // Auto-connect on page load if token is provided
+        window.onload = () => {
+            log('🧪 Socket.IO Test Page Loaded', 'info');
+            log('Enter your admin token and click Connect to start testing', 'info');
+        };
+    </script>
+</body>
+</html>

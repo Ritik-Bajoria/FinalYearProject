@@ -20,21 +20,21 @@ const useAdminSocket = () => {
 
         const newSocket = io(API_BASE_URL, {
             path: '/socket.io',
-            transports: ['polling', 'websocket'],
+            transports: ['polling'],
+            upgrade: true,
             auth: { token },
             reconnection: true,
             reconnectionAttempts: 5,
             reconnectionDelay: 1000,
             timeout: 20000,
-            forceNew: true,
-            autoConnect: true,
-            upgrade: true
+            autoConnect: true
         });
 
         newSocket.on('connect', () => {
             console.log('✅ Admin socket connected');
             setIsConnected(true);
             setConnectionError(null);
+            console.log('🔐 Authenticating admin socket with token:', token ? token.substring(0, 20) + '...' : 'No token');
             newSocket.emit('authenticate', { token });
         });
 

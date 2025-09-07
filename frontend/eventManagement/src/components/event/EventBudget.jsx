@@ -1,304 +1,316 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Box, Typography, Table, TableHead, TableBody, 
-  TableRow, TableCell, Paper, Button, TextField,
-  CircularProgress, Alert, Divider
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Box,
+  Grid, // Added Grid import
+  Card,
+  CardContent,
+  Typography,
+  Button,
+  TextField,
+  MenuItem,
+  Select,
+  FormControl,
+  InputLabel,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Alert,
+  CircularProgress,
+  Chip
 } from '@mui/material';
-import { 
-  Add, AttachMoney, Edit, Delete, 
-  Save, Cancel, Receipt 
+import {
+  Add as AddIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  AttachMoney,
+  TrendingUp,
+  TrendingDown,
+  Close as CloseIcon
 } from '@mui/icons-material';
 
-const EventBudget = ({ eventId, budget: initialBudget, showNotification }) => {
-  const [budget, setBudget] = useState(initialBudget || {
-    allocated_amount: 0,
-    spent_amount: 0,
-    remaining_budget: 0
-  });
-  const [expenses, setExpenses] = useState([]);
-  const [newExpense, setNewExpense] = useState({ 
-    description: '', 
-    amount: '',
-    category: ''
-  });
+const EventBudget = ({ eventId, showNotification }) => {
+  const [budgetItems, setBudgetItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [editMode, setEditMode] = useState(false);
-  const [editBudget, setEditBudget] = useState({
-    allocated_amount: 0
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [formData, setFormData] = useState({
+    description: '',
+    amount: ''
   });
 
-  useEffect(() => {
-    if (initialBudget) {
-      setBudget(initialBudget);
-      setEditBudget({
-        allocated_amount: initialBudget.allocated_amount
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:7000/api';
+
+  // Centralized API call handler
+  const apiCall = useCallback(async (endpoint, options = {}) => {
+    const token = localStorage.getItem('token');
+    try {
+      const headers = {
+        ...(options.body instanceof FormData
+          ? {} // don't set content-type for FormData
+          : { 'Content-Type': 'application/json' }),
+        ...(token && { Authorization: `Bearer ${token}` }),
+        ...(options.headers || {}),
+      };
+
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers,
+        body: options.body instanceof FormData ? options.body : JSON.stringify(options.body),
       });
+
+      if (!response.ok) {
+        let errorMsg = `HTTP error! status: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMsg = errorData?.error || errorData?.message || errorMsg;
+        } catch {
+          // ignore non-JSON error body
+        }
+
+        // Handle expired/invalid token
+        if (response.status === 401 || response.status === 422) {
+          localStorage.removeItem('token');
+          window.location.href = '/login';
+        }
+
+        throw new Error(errorMsg);
+      }
+
+      const data = await response.json();
+      return data.data || data;
+    } catch (err) {
+      throw err;
     }
-  }, [initialBudget]);
+  }, [API_BASE_URL]);
 
-  // In a real implementation, you would fetch expenses from the API
-  // useEffect(() => {
-  //   const fetchExpenses = async () => {
-  //     try {
-  //       setLoading(true);
-  //       const response = await axios.get(`/api/events/${eventId}/expenses`);
-  //       setExpenses(response.data);
-  //     } catch (err) {
-  //       setError(err.response?.data?.error || 'Failed to fetch expenses');
-  //       showNotification('Failed to fetch expenses', 'error');
-  //     } finally {
-  //       setLoading(false);
-  //     }
-  //   };
-  //   fetchExpenses();
-  // }, [eventId]);
+  const fetchBudgetItems = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await apiCall(`/events/${eventId}/budget`);
+      // Handle the budget response structure
+      if (response.expenses) {
+        setBudgetItems(response.expenses);
+      } else {
+        setBudgetItems([]);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to fetch budget items');
+      showNotification(err.message || 'Failed to fetch budget items', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const handleAddExpense = () => {
-    if (!newExpense.description || !newExpense.amount) return;
+  useEffect(() => {
+    if (eventId) {
+      fetchBudgetItems();
+    }
+  }, [eventId]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      if (editingItem) {
+        // Update existing item
+        await apiCall(`/events/${eventId}/budget/expenses/${editingItem.expense_id}`, {
+          method: 'PUT',
+          body: formData
+        });
+        showNotification('Budget item updated successfully', 'success');
+      } else {
+        // Create new item
+        await apiCall(`/events/${eventId}/budget/expenses`, {
+          method: 'POST',
+          body: formData
+        });
+        showNotification('Budget item added successfully', 'success');
+      }
+      
+      setDialogOpen(false);
+      setEditingItem(null);
+      setFormData({
+        description: '',
+        amount: ''
+      });
+      fetchBudgetItems();
+    } catch (err) {
+      showNotification(err.message || 'Failed to save budget item', 'error');
+    }
+  };
+
+  const handleDelete = async (expenseId) => {
+    if (!window.confirm('Are you sure you want to delete this budget item?')) return;
     
     try {
-      const expense = {
-        id: Date.now(),
-        description: newExpense.description,
-        amount: parseFloat(newExpense.amount),
-        category: newExpense.category || 'Other',
-        date: new Date().toISOString()
-      };
-      
-      // In a real app, you would send this to the server
-      // await axios.post(`/api/events/${eventId}/expenses`, expense);
-      
-      setExpenses([...expenses, expense]);
-      setBudget(prev => ({
-        ...prev,
-        spent_amount: prev.spent_amount + expense.amount,
-        remaining_budget: prev.allocated_amount - (prev.spent_amount + expense.amount)
-      }));
-      setNewExpense({ description: '', amount: '', category: '' });
-      showNotification('Expense added successfully', 'success');
-    } catch (err) {
-      showNotification('Failed to add expense', 'error');
-    }
-  };
-
-  const handleDeleteExpense = (expenseId) => {
-    try {
-      const expenseToDelete = expenses.find(e => e.id === expenseId);
-      if (!expenseToDelete) return;
-      
-      // In a real app, you would send delete request to the server
-      // await axios.delete(`/api/events/${eventId}/expenses/${expenseId}`);
-      
-      setExpenses(expenses.filter(e => e.id !== expenseId));
-      setBudget(prev => ({
-        ...prev,
-        spent_amount: prev.spent_amount - expenseToDelete.amount,
-        remaining_budget: prev.allocated_amount - (prev.spent_amount - expenseToDelete.amount)
-      }));
-      showNotification('Expense deleted successfully', 'success');
-    } catch (err) {
-      showNotification('Failed to delete expense', 'error');
-    }
-  };
-
-  const handleSaveBudget = () => {
-    try {
-      // In a real app, you would send this to the server
-      // await axios.put(`/api/events/${eventId}/budget`, editBudget);
-      
-      setBudget({
-        allocated_amount: editBudget.allocated_amount,
-        spent_amount: budget.spent_amount,
-        remaining_budget: editBudget.allocated_amount - budget.spent_amount
+      await apiCall(`/events/${eventId}/budget/expenses/${expenseId}`, {
+        method: 'DELETE'
       });
-      setEditMode(false);
-      showNotification('Budget updated successfully', 'success');
+      showNotification('Budget item deleted successfully', 'success');
+      fetchBudgetItems();
     } catch (err) {
-      showNotification('Failed to update budget', 'error');
+      showNotification(err.message || 'Failed to delete budget item', 'error');
     }
   };
 
-  const remainingBudget = budget.allocated_amount - budget.spent_amount;
+  const openEditDialog = (item = null) => {
+    if (item) {
+      setEditingItem(item);
+      setFormData({
+        description: item.description,
+        amount: item.amount
+      });
+    } else {
+      setEditingItem(null);
+      setFormData({
+        description: '',
+        amount: ''
+      });
+    }
+    setDialogOpen(true);
+  };
+
+  const calculateTotals = () => {
+    const totalSpent = budgetItems.reduce((sum, item) => sum + parseFloat(item.amount || 0), 0);
+    return {
+      totalSpent,
+      itemCount: budgetItems.length
+    };
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'completed': return 'success';
+      case 'in_progress': return 'warning';
+      case 'planned': return 'info';
+      case 'cancelled': return 'error';
+      default: return 'default';
+    }
+  };
+
+  const totals = calculateTotals();
 
   return (
-    <Paper sx={{ p: 3 }}>
+    <Box>
+      {/* Header Section */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h6" gutterBottom>
+        <Typography variant="h5" component="h1">
           Event Budget
         </Typography>
-        {!editMode ? (
-          <Button
-            variant="outlined"
-            startIcon={<Edit />}
-            onClick={() => setEditMode(true)}
-          >
-            Edit Budget
-          </Button>
-        ) : (
-          <Box display="flex" gap={1}>
-            <Button
-              variant="outlined"
-              startIcon={<Cancel />}
-              onClick={() => setEditMode(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="contained"
-              startIcon={<Save />}
-              onClick={handleSaveBudget}
-            >
-              Save
-            </Button>
-          </Box>
-        )}
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => openEditDialog()}
+        >
+          Add Budget Item
+        </Button>
       </Box>
 
-      {loading && !budget ? (
-        <Box display="flex" justifyContent="center" my={4}>
-          <CircularProgress />
-        </Box>
-      ) : error && !budget ? (
-        <Alert severity="error" sx={{ mb: 3 }}>
+      {/* Error Alert */}
+      {error && (
+        <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 3 }}>
           {error}
         </Alert>
-      ) : (
-        <>
-          <Box sx={{ mb: 4, p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
-            <Typography variant="subtitle1" gutterBottom>
-              Budget Summary
-            </Typography>
-            {editMode ? (
-              <Box display="flex" alignItems="center" gap={2}>
-                <TextField
-                  label="Allocated Budget"
-                  type="number"
-                  value={editBudget.allocated_amount}
-                  onChange={(e) => setEditBudget({
-                    allocated_amount: parseFloat(e.target.value) || 0
-                  })}
-                  InputProps={{
-                    startAdornment: <AttachMoney fontSize="small" />,
-                  }}
-                  fullWidth
-                />
-              </Box>
-            ) : (
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={4}>
-                  <Paper sx={{ p: 2, textAlign: 'center' }}>
-                    <Typography variant="subtitle2">Allocated</Typography>
-                    <Typography variant="h6" color="primary">
-                      ${budget.allocated_amount.toFixed(2)}
-                    </Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <Paper sx={{ p: 2, textAlign: 'center' }}>
-                    <Typography variant="subtitle2">Spent</Typography>
-                    <Typography variant="h6">
-                      ${budget.spent_amount.toFixed(2)}
-                    </Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <Paper sx={{ p: 2, textAlign: 'center' }}>
-                    <Typography variant="subtitle2">Remaining</Typography>
-                    <Typography 
-                      variant="h6" 
-                      color={remainingBudget < 0 ? 'error' : 'success'}
-                    >
-                      ${remainingBudget.toFixed(2)}
-                    </Typography>
-                  </Paper>
-                </Grid>
-              </Grid>
-            )}
-          </Box>
+      )}
 
-          <Divider sx={{ my: 3 }} />
-
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="subtitle1" gutterBottom>
-              Add New Expense
-            </Typography>
-            <Box display="flex" flexWrap="wrap" gap={2} alignItems="flex-end">
-              <TextField
-                label="Description"
-                value={newExpense.description}
-                onChange={(e) => setNewExpense({...newExpense, description: e.target.value})}
-                size="small"
-                sx={{ flexGrow: 1 }}
-              />
-              <TextField
-                label="Amount"
-                type="number"
-                value={newExpense.amount}
-                onChange={(e) => setNewExpense({...newExpense, amount: e.target.value})}
-                size="small"
-                InputProps={{
-                  startAdornment: <AttachMoney fontSize="small" />,
-                }}
-              />
-              <TextField
-                label="Category"
-                value={newExpense.category}
-                onChange={(e) => setNewExpense({...newExpense, category: e.target.value})}
-                size="small"
-              />
-              <Button
-                variant="contained"
-                startIcon={<Add />}
-                onClick={handleAddExpense}
-                disabled={!newExpense.description || !newExpense.amount}
-              >
-                Add Expense
-              </Button>
-            </Box>
-          </Box>
-
-          <Typography variant="subtitle1" gutterBottom>
-            Expense Records
-          </Typography>
-          {expenses.length === 0 ? (
-            <Paper sx={{ p: 3, textAlign: 'center' }}>
-              <Receipt sx={{ fontSize: 60, color: 'text.secondary', mb: 1 }} />
-              <Typography variant="h6">No Expenses Recorded</Typography>
-              <Typography color="text.secondary">
-                Add expenses to track your event budget
+      {/* Summary Cards */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography color="text.secondary" gutterBottom>
+                Total Expenses
               </Typography>
-            </Paper>
+              <Typography variant="h4" component="div">
+                ${totals.totalSpent.toFixed(2)}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography color="text.secondary" gutterBottom>
+                Total Items
+              </Typography>
+              <Typography variant="h4" component="div">
+                {totals.itemCount}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Budget Items Table */}
+      <Card>
+        <CardContent>
+          {loading ? (
+            <Box display="flex" justifyContent="center" py={4}>
+              <CircularProgress />
+            </Box>
+          ) : budgetItems.length === 0 ? (
+            <Box textAlign="center" py={4}>
+              <AttachMoney sx={{ fontSize: 60, color: 'text.secondary', mb: 1 }} />
+              <Typography variant="h6" gutterBottom>
+                No Budget Items
+              </Typography>
+              <Typography color="text.secondary">
+                Add budget items to start tracking your event expenses
+              </Typography>
+            </Box>
           ) : (
-            <TableContainer component={Paper}>
+            <TableContainer>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Date</TableCell>
                     <TableCell>Description</TableCell>
-                    <TableCell>Category</TableCell>
                     <TableCell align="right">Amount</TableCell>
-                    <TableCell align="right">Actions</TableCell>
+                    <TableCell>Date</TableCell>
+                    <TableCell>Added By</TableCell>
+                    <TableCell align="center">Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {expenses.map((expense) => (
-                    <TableRow key={expense.id}>
+                  {budgetItems.map((item) => (
+                    <TableRow key={item.expense_id}>
                       <TableCell>
-                        {new Date(expense.date).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>{expense.description}</TableCell>
-                      <TableCell>{expense.category}</TableCell>
-                      <TableCell align="right">
-                        ${expense.amount.toFixed(2)}
+                        <Typography fontWeight="medium">
+                          {item.description}
+                        </Typography>
                       </TableCell>
                       <TableCell align="right">
-                        <IconButton 
-                          size="small" 
-                          onClick={() => handleDeleteExpense(expense.id)}
+                        ${parseFloat(item.amount || 0).toFixed(2)}
+                      </TableCell>
+                      <TableCell>
+                        {item.created_at ? new Date(item.created_at).toLocaleDateString() : 'N/A'}
+                      </TableCell>
+                      <TableCell>
+                        {item.uploaded_by_name || 'Unknown'}
+                      </TableCell>
+                      <TableCell align="center">
+                        <IconButton
+                          size="small"
+                          onClick={() => openEditDialog(item)}
+                          sx={{ mr: 1 }}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDelete(item.expense_id)}
                           color="error"
                         >
-                          <Delete fontSize="small" />
+                          <DeleteIcon />
                         </IconButton>
                       </TableCell>
                     </TableRow>
@@ -307,9 +319,62 @@ const EventBudget = ({ eventId, budget: initialBudget, showNotification }) => {
               </Table>
             </TableContainer>
           )}
-        </>
-      )}
-    </Paper>
+        </CardContent>
+      </Card>
+
+      {/* Add/Edit Dialog */}
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          {editingItem ? 'Edit Budget Item' : 'Add Budget Item'}
+          <IconButton
+            aria-label="close"
+            onClick={() => setDialogOpen(false)}
+            sx={{
+              position: 'absolute',
+              right: 8,
+              top: 8,
+              color: (theme) => theme.palette.grey[500],
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <form onSubmit={handleSubmit}>
+          <DialogContent>
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Description"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  required
+                  multiline
+                  rows={2}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Amount"
+                  type="number"
+                  value={formData.amount}
+                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                  inputProps={{ min: 0, step: 0.01 }}
+                  required
+                />
+              </Grid>
+            </Grid>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+            <Button type="submit" variant="contained">
+              {editingItem ? 'Update' : 'Add'} Item
+            </Button>
+          </DialogActions>
+        </form>
+      </Dialog>
+    </Box>
   );
 };
 

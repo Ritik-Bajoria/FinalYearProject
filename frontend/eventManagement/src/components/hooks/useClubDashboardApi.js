@@ -34,7 +34,21 @@ const useApi = () => {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data?.error || data?.message || 'Something went wrong');
+        let errorMsg = `HTTP error! status: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMsg = errorData?.error || errorData?.message || errorMsg;
+        } catch {
+          // ignore non-JSON error body
+        }
+
+        // Handle expired/invalid token
+        if (response.status === 401 || response.status === 422) {
+          localStorage.removeItem('token');
+          window.location.href = '/login';
+        }
+
+        throw new Error(errorMsg);
       }
 
       return data;
@@ -61,26 +75,26 @@ const useClubDashboardApi = (userId) => {
   const { apiCall, loading: apiLoading, error: apiError } = useApi();
 
   const fetchClubs = async () => {
-  try {
-    const response = await apiCall('/clubs');
-    // Handle both array response and object with data property
-    const clubsData = Array.isArray(response) ? response : response.data;
-    
-    setDashboardData({
-      clubs: Array.isArray(clubsData) ? clubsData : [],
-      filteredClubs: Array.isArray(clubsData) ? clubsData : [],
-      loading: false,
-      error: null
-    });
-  } catch (err) {
-    setDashboardData({
-      clubs: [],
-      filteredClubs: [],
-      loading: false,
-      error: err.message
-    });
-  }
-};
+    try {
+      const response = await apiCall('/clubs');
+      // Handle both array response and object with data property
+      const clubsData = Array.isArray(response) ? response : response.data;
+
+      setDashboardData({
+        clubs: Array.isArray(clubsData) ? clubsData : [],
+        filteredClubs: Array.isArray(clubsData) ? clubsData : [],
+        loading: false,
+        error: null
+      });
+    } catch (err) {
+      setDashboardData({
+        clubs: [],
+        filteredClubs: [],
+        loading: false,
+        error: err.message
+      });
+    }
+  };
 
   const joinClub = async (clubId) => {
     try {
@@ -109,13 +123,13 @@ const useClubDashboardApi = (userId) => {
   const createClub = async (clubData) => {
     try {
       const formData = new FormData();
-      
+
       // Append all fields to formData
       formData.append('name', clubData.name);
       formData.append('description', clubData.description);
       formData.append('category', clubData.category);
       formData.append('club_details', clubData.club_details || '');
-      
+
       // Append files if they exist
       if (clubData.logo_file) {
         formData.append('logo_url', clubData.logo_file);
@@ -128,7 +142,7 @@ const useClubDashboardApi = (userId) => {
         method: 'POST',
         body: formData
       });
-      
+
       await fetchClubs();
       return response;
     } catch (err) {

@@ -29,8 +29,21 @@ const useClubApi = (userId) => {
             });
 
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+                let errorMsg = `HTTP error! status: ${response.status}`;
+                try {
+                    const errorData = await response.json();
+                    errorMsg = errorData?.error || errorData?.message || errorMsg;
+                } catch {
+                    // ignore non-JSON error body
+                }
+
+                // Handle expired/invalid token
+                if (response.status === 401 || response.status === 422) {
+                    localStorage.removeItem('token');
+                    window.location.href = '/login';
+                }
+
+                throw new Error(errorMsg);
             }
             const data = await response.json();
             setClubData(prev => ({ ...prev, loading: false }));
@@ -181,39 +194,39 @@ const useClubApi = (userId) => {
     };
 
     const updateClubDetails = async (clubId, formData) => {
-        try{
-        const dataToUpdate = new FormData();
-        // console.log('Received FormData from child:');
-        // for (let [key, value] of formData.entries()) {
-        //     console.log(key, value);
-        // }
-        // Safely iterate through formData properties
-        for (let [key, value] of formData.entries()) {
-            if (value instanceof File) {
-                // For files, append with the file object
-                dataToUpdate.append(key, value);
-            } else if (Array.isArray(value)) {
-                // For arrays, append each item individually
-                value.forEach(item => {
-                    dataToUpdate.append(key, item);
-                });
-            } else {
-                // For other values, append as-is (FormData will convert to string)
-                dataToUpdate.append(key, value);
+        try {
+            const dataToUpdate = new FormData();
+            // console.log('Received FormData from child:');
+            // for (let [key, value] of formData.entries()) {
+            //     console.log(key, value);
+            // }
+            // Safely iterate through formData properties
+            for (let [key, value] of formData.entries()) {
+                if (value instanceof File) {
+                    // For files, append with the file object
+                    dataToUpdate.append(key, value);
+                } else if (Array.isArray(value)) {
+                    // For arrays, append each item individually
+                    value.forEach(item => {
+                        dataToUpdate.append(key, item);
+                    });
+                } else {
+                    // For other values, append as-is (FormData will convert to string)
+                    dataToUpdate.append(key, value);
+                }
             }
+            console.log(dataToUpdate)
+            return await apiCall(`/clubs/${clubId}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                },
+                body: dataToUpdate
+            });
+        } catch (error) {
+            console.error('Error in updateClubDetails:', error);
+            throw error;
         }
-        console.log(dataToUpdate)
-        return await apiCall(`/clubs/${clubId}`, {
-            method: 'PUT',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            },
-            body: dataToUpdate
-        });
-    }catch (error){
-                console.error('Error in updateClubDetails:', error);
-        throw error;
-    }
     };
 
     const deleteClub = async (clubId) => {

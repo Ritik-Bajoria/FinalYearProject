@@ -51,18 +51,6 @@ def check_db_connection():
         logger.error(f"Failed to connect to database: {str(e)}")
         return False
 
-# Socket handlers are now imported from socket_handlers.py to avoid duplication
-
-
-
-
-
-
-
-
-
-
-
 # ==================== UTILITY FUNCTIONS ====================
 
 def validate_api_key():

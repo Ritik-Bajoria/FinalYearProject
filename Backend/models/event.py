@@ -50,7 +50,7 @@ class Event(BaseModel):
     attendances = db.relationship('Attendance', backref='event', lazy=True, cascade='all, delete-orphan')
     feedbacks = db.relationship('Feedback', backref='event', lazy=True, cascade='all, delete-orphan')
     messages = db.relationship('Message', backref='event', lazy=True, cascade='all, delete-orphan')
-    budget = db.relationship('EventBudget', backref='event', uselist=False, lazy=True, cascade='all, delete-orphan')
+    budget = db.relationship('EventBudget', uselist=False, lazy=True, cascade='all, delete-orphan')
     documents = db.relationship('EventDocument', backref='event', lazy=True, cascade='all, delete-orphan')  # ✅ New
     budget_allocations = db.relationship('BudgetAllocation', backref='event', lazy=True, cascade='all, delete-orphan')  # ✅ New
 

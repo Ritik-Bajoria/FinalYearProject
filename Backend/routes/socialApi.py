@@ -25,12 +25,8 @@ def get_social_posts(current_user):
             AdminPosting.is_pinned == True
         ).all()
         
-        # Get volunteer postings
-        volunteer_postings = VolunteerPosting.query.join(
-            Event, VolunteerPosting.event_id == Event.event_id
-        ).filter(
-            Event.approval_status == 'approved'
-        ).all()
+        # Get volunteer postings - temporarily disabled due to schema mismatch
+        volunteer_postings = []
         
         # Combine all posts
         posts = []
@@ -106,9 +102,9 @@ def get_social_posts(current_user):
                 'id': posting.posting_id,
                 'event_id': posting.event_id,
                 'event_title': posting.event.title if posting.event else 'Unknown Event',
-                'role': posting.role,
+                'role': getattr(posting, 'title', None) or getattr(posting, 'role', 'Volunteer'),
                 'description': posting.description,
-                'slots_available': posting.slots_available,
+                'slots_available': getattr(posting, 'positions_available', None) or getattr(posting, 'slots_available', 0),
                 'application_status': application_status,
                 'user_role': user_role  # Add user's role for frontend
             })
@@ -185,10 +181,11 @@ def register_for_event(current_user, event_id):
         db.session.add(log)
         
         # Create notification for event organizers
+        from ..models.notification import NotificationType
         notification = Notification(
             user_id=event.created_by,  # Notify event creator
             message=f'{current_user.full_name} has requested to register for your event "{event.title}"',
-            notification_type='event_registration_request',
+            notification_type=NotificationType.EVENT_INVITATION,
             related_event_id=event_id,
             related_user_id=current_user.user_id
         )
@@ -280,8 +277,8 @@ def apply_for_volunteer(current_user, posting_id):
         if posting.event and posting.event.created_by:
             notification = Notification(
                 user_id=posting.event.created_by,
-                message=f'{current_user.full_name} has applied for the volunteer role "{posting.role}" for your event "{posting.event.title}"',
-                notification_type='volunteer_application',
+                message=f'{current_user.full_name} has applied for the volunteer role "{posting.title}" for your event "{posting.event.title}"',
+                notification_type=NotificationType.GENERAL,
                 related_event_id=posting.event_id,
                 related_user_id=current_user.user_id
             )

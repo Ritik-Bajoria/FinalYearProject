@@ -1,15 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Table, TableHead, TableBody,
-  TableRow, TableCell, Checkbox, Paper, Button,
+  TableRow, TableCell, Paper, Button,
   CircularProgress, Alert, Chip, TextField, Stack,
   Dialog, DialogTitle, DialogContent, DialogActions,
-  Tooltip, IconButton
+  Tooltip, IconButton, Avatar, TableContainer
 } from '@mui/material';
 import {
   People, CheckCircle, EventAvailable, Search,
-  QrCode, Close, PersonAdd, PersonRemove,
-  Download, Print, FilterList
+  Close, PersonAdd, PersonRemove,
+  Download, FilterList
 } from '@mui/icons-material';
 
 const EventAttendance = ({ eventId, showNotification }) => {
@@ -18,97 +18,112 @@ const EventAttendance = ({ eventId, showNotification }) => {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [openQRDialog, setOpenQRDialog] = useState(false);
-  const [selectedUser, setSelectedUser] = useState(null);
 
-  // In a real implementation, you would use the useEventApi hook
-  // const { loading, error, getEventAttendance, markAttendance } = useEventApi();
 
-  useEffect(() => {
-    const fetchAttendance = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        // const attendanceData = await getEventAttendance(eventId);
-        // setAttendance(attendanceData);
-        
-        // Mock data for demonstration
-        setTimeout(() => {
-          setAttendance([
-            {
-              user_id: '1',
-              user: { full_name: 'Alex Johnson', email: 'alex@example.com' },
-              attended: true,
-              check_in_time: new Date(Date.now() - 3600000).toISOString(),
-              status: 'present'
-            },
-            {
-              user_id: '2',
-              user: { full_name: 'Sam Wilson', email: 'sam@example.com' },
-              attended: false,
-              check_in_time: null,
-              status: 'absent'
-            },
-            {
-              user_id: '3',
-              user: { full_name: 'Taylor Smith', email: 'taylor@example.com' },
-              attended: true,
-              check_in_time: new Date(Date.now() - 7200000).toISOString(),
-              status: 'present'
-            }
-          ]);
-          setLoading(false);
-        }, 800);
-      } catch (err) {
-        setError(err.response?.data?.error || 'Failed to fetch attendance');
-        showNotification('Failed to fetch attendance', 'error');
-        setLoading(false);
-      }
-    };
-    fetchAttendance();
-  }, [eventId]);
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:7000/api';
 
-  const handleToggleAttendance = async (userId) => {
+  const apiCall = useCallback(async (endpoint, options = {}) => {
+    const token = localStorage.getItem('token');
     try {
-      setLoading(true);
-      // In a real app, you would use:
-      // await markAttendance(eventId, userId);
-      // const updatedAttendance = await getEventAttendance(eventId);
-      // setAttendance(updatedAttendance);
-      
-      // Mock update
-      setTimeout(() => {
-        setAttendance(attendance.map(attendee => 
-          attendee.user_id === userId 
-            ? { 
-                ...attendee, 
-                attended: !attendee.attended,
-                check_in_time: !attendee.attended ? new Date().toISOString() : null,
-                status: !attendee.attended ? 'present' : 'absent'
-              } 
-            : attendee
-        ));
-        setLoading(false);
-        showNotification(
-          `Attendance ${!attendance.find(a => a.user_id === userId).attended ? 'marked' : 'unmarked'} successfully`,
-          'success'
-        );
-      }, 500);
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+        ...(options.headers || {}),
+      };
+
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers,
+        body: options.body ? JSON.stringify(options.body) : undefined,
+      });
+
+      if (!response.ok) {
+        let errorMsg = `HTTP error! status: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMsg = errorData?.error || errorData?.message || errorMsg;
+        } catch {
+          // ignore non-JSON error body
+        }
+        throw new Error(errorMsg);
+      }
+
+      const data = await response.json();
+      return Array.isArray(data) ? data : data.data || data;
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to update attendance');
-      showNotification('Failed to update attendance', 'error');
+      throw err;
+    }
+  }, [API_BASE_URL]);
+
+  const fetchAttendance = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const attendanceData = await apiCall(`/events/${eventId}/attendance`);
+      setAttendance(attendanceData);
+    } catch (err) {
+      setError(err.message || 'Failed to fetch attendance');
+      showNotification(err.message || 'Failed to fetch attendance', 'error');
+    } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    if (eventId) {
+      fetchAttendance();
+    }
+  }, [eventId]);
+
+  const handleToggleAttendance = async (userId) => {
+    try {
+      const attendee = attendance.find(a => a.user_id === userId);
+      
+      if (attendee.attended) {
+        // Unmark attendance
+        await apiCall(`/events/${eventId}/attendance/${userId}`, {
+          method: 'DELETE'
+        });
+        showNotification('Attendance unmarked successfully', 'success');
+      } else {
+        // Mark attendance
+        await apiCall(`/events/${eventId}/attendance`, {
+          method: 'POST',
+          body: { user_id: userId }
+        });
+        showNotification('Attendance marked successfully', 'success');
+      }
+      
+      fetchAttendance();
+    } catch (err) {
+      showNotification(err.message || 'Failed to update attendance', 'error');
+    }
+  };
+
   const handleBulkCheckIn = () => {
-    // In a real app, you would implement bulk check-in functionality
-    showNotification('Bulk check-in would be implemented here', 'info');
+    if (showNotification) {
+      showNotification('Bulk check-in functionality coming soon', 'info');
+    } else {
+      alert('Bulk check-in functionality coming soon');
+    }
   };
 
   const handleExportAttendance = () => {
-    // In a real app, you would implement export functionality
-    showNotification('Export functionality would be implemented here', 'info');
+    const csvContent = "data:text/csv;charset=utf-8," + 
+      "Name,Email,Status,Check-in Time\n" +
+      attendance.map(a => 
+        `${a.user.full_name},${a.user.email},${a.status},${a.check_in_time || 'N/A'}`
+      ).join("\n");
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `event_${eventId}_attendance.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showNotification('Attendance exported successfully', 'success');
   };
 
   const filteredAttendance = attendance.filter(attendee => {
@@ -131,13 +146,7 @@ const EventAttendance = ({ eventId, showNotification }) => {
           Event Attendance
         </Typography>
         <Stack direction="row" spacing={1}>
-          <Button
-            variant="outlined"
-            startIcon={<QrCode />}
-            onClick={() => setOpenQRDialog(true)}
-          >
-            QR Check-in
-          </Button>
+
           <Button
             variant="outlined"
             startIcon={<Download />}
@@ -178,14 +187,14 @@ const EventAttendance = ({ eventId, showNotification }) => {
             Absent ({absentCount})
           </Button>
         </Box>
-        <Button
+        {/* <Button
           variant="contained"
           color="primary"
           startIcon={<PersonAdd />}
           onClick={handleBulkCheckIn}
         >
           Bulk Check-in
-        </Button>
+        </Button> */}
       </Box>
 
       {loading && attendance.length === 0 ? (
@@ -224,9 +233,9 @@ const EventAttendance = ({ eventId, showNotification }) => {
                   <TableCell>
                     <Box display="flex" alignItems="center" gap={2}>
                       <Avatar>
-                        {attendee.user.full_name.charAt(0)}
+                        {attendee.user.full_name?.charAt(0) || 'U'}
                       </Avatar>
-                      {attendee.user.full_name}
+                      {attendee.user.full_name || 'Unknown User'}
                     </Box>
                   </TableCell>
                   <TableCell>{attendee.user.email}</TableCell>
@@ -261,50 +270,7 @@ const EventAttendance = ({ eventId, showNotification }) => {
         </TableContainer>
       )}
 
-      {/* QR Check-in Dialog */}
-      <Dialog open={openQRDialog} onClose={() => setOpenQRDialog(false)} maxWidth="sm">
-        <DialogTitle>
-          <Box display="flex" justifyContent="space-between" alignItems="center">
-            QR Code Check-in
-            <IconButton onClick={() => setOpenQRDialog(false)}>
-              <Close />
-            </IconButton>
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          <Box textAlign="center" p={3}>
-            <Typography variant="h6" gutterBottom>
-              Scan QR Code to Check-in
-            </Typography>
-            <Box p={2} border={1} borderColor="divider" borderRadius={1} mb={2}>
-              {/* In a real app, you would display the actual QR code */}
-              <Box 
-                width={256} 
-                height={256} 
-                bgcolor="#f5f5f5" 
-                display="flex" 
-                alignItems="center" 
-                justifyContent="center"
-              >
-                <Typography color="text.secondary">QR Code Placeholder</Typography>
-              </Box>
-            </Box>
-            <Typography variant="body2" color="text.secondary">
-              Show this QR code to attendees for self check-in
-            </Typography>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenQRDialog(false)}>Close</Button>
-          <Button 
-            variant="contained" 
-            startIcon={<Print />}
-            onClick={() => showNotification('Print functionality would be implemented here', 'info')}
-          >
-            Print
-          </Button>
-        </DialogActions>
-      </Dialog>
+
     </Paper>
   );
 };

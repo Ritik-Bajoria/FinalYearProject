@@ -20,9 +20,11 @@ import useAuthUser from '../hooks/useAuthUser';
 const StudentDashboard = () => {
   const [activeTab, setActiveTab] = useState('social');
 
-  const { user, student } = useAuthUser();
+  // Use the auth hook - this must be called unconditionally
+  const { user, student, loading, error } = useAuthUser();
 
-  if (!user || !student) {
+  // Show loading state while auth is loading
+  if (loading) {
     return (
       <Box
         sx={{
@@ -117,7 +119,7 @@ const StudentDashboard = () => {
               mb: 1
             }}
           >
-            Loading Student Dashboard
+            {error ? 'Authentication Error' : 'Loading Student Dashboard'}
           </Box>
           <Box
             sx={{
@@ -126,7 +128,74 @@ const StudentDashboard = () => {
               opacity: 0.8
             }}
           >
-            Preparing your personalized experience...
+            {error ? 'Please try refreshing the page' : 'Preparing your personalized experience...'}
+          </Box>
+        </Paper>
+      </Box>
+    );
+  }
+
+  // Show error state if user or student data is missing
+  if (!user || !student) {
+    return (
+      <Box
+        sx={{
+          height: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: `linear-gradient(135deg, ${alpha('#1A237E', 0.1)} 0%, ${alpha('#3F51B5', 0.05)} 100%)`,
+        }}
+      >
+        <Paper
+          elevation={8}
+          sx={{
+            p: 6,
+            borderRadius: 4,
+            background: 'rgba(255, 255, 255, 0.95)',
+            backdropFilter: 'blur(10px)',
+            textAlign: 'center',
+            minWidth: '300px',
+            border: `1px solid ${alpha('#1A237E', 0.1)}`
+          }}
+        >
+          <Box
+            sx={{
+              fontSize: '1.5rem',
+              fontWeight: 600,
+              color: '#d32f2f',
+              mb: 2
+            }}
+          >
+            Access Denied
+          </Box>
+          <Box
+            sx={{
+              fontSize: '1rem',
+              color: '#666',
+              mb: 3
+            }}
+          >
+            You need to be logged in as a student to access this dashboard.
+          </Box>
+          <Box
+            component="button"
+            onClick={() => window.location.href = '/login'}
+            sx={{
+              px: 4,
+              py: 2,
+              bgcolor: '#1A237E',
+              color: 'white',
+              border: 'none',
+              borderRadius: 2,
+              cursor: 'pointer',
+              fontWeight: 600,
+              '&:hover': {
+                bgcolor: '#303F9F'
+              }
+            }}
+          >
+            Go to Login
           </Box>
         </Paper>
       </Box>

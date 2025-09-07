@@ -17,11 +17,12 @@ import { useNavigate, useParams } from 'react-router-dom';
 import useEventApi from '../hooks/useEventApi';
 import LoadingSpinner from '../admin/shared/LoadingSpinner';
 import EventChat from '../event/EventChat';
-import EventDocuments from '../event/EventDocuments';
+// import EventDocuments from '../event/EventDocuments';
 import EventAdminDashboard from './EventAdminDashboard';
 import EventOrganizerDashboard from './EventOrganizerDashboard';
 import EventAttendeeDashboard from './EventAttendeeDashboard';
 import EventEditModal from '../event/EventEditModal';
+import useAuthUser from '../hooks/useAuthUser';
 
 // University Blue Theme Colors
 const theme = {
@@ -48,6 +49,7 @@ const EventDashboard = () => {
         message: '', 
         severity: 'info' 
     });
+    const { user, student } = useAuthUser();
     
     const {
         event,
@@ -144,8 +146,8 @@ const EventDashboard = () => {
     const getTabsForRole = () => {
         const commonTabs = [
             { value: 'details', label: 'Details' },
-            { value: 'chat', label: 'Chat', icon: <Chat /> },
-            { value: 'documents', label: 'Documents', icon: <AttachFile /> }
+            { value: 'chat', label: 'Chat', icon: <Chat /> }
+            // { value: 'documents', label: 'Documents', icon: <AttachFile /> }
         ];
 
         const roleTabs = {
@@ -160,9 +162,10 @@ const EventDashboard = () => {
                 { value: 'volunteers', label: 'Volunteers', icon: <VolunteerActivism /> }
             ],
             attendee: [
-                { value: 'feedback', label: 'Feedback', icon: <Feedback /> },
-                ...(event?.qr_check_in_enabled ? 
-                    [{ value: 'qr', label: 'QR Code', icon: <QrCode /> }] : [])
+                { value: 'feedback', label: 'Feedback', icon: <Feedback /> }
+                // ,
+                // ...(event?.qr_check_in_enabled ? 
+                //     [{ value: 'qr', label: 'QR Code', icon: <QrCode /> }] : [])
             ]
         };
 
@@ -641,18 +644,11 @@ const EventDashboard = () => {
                                         userRole={event.user_role}
                                         eventStatus={event.event_status}
                                         showNotification={showNotification}
+                                        currentUser={user}
                                     />
                                 )}
 
-                                {activeTab === 'documents' && (
-                                    <EventDocuments 
-                                        eventId={eventId} 
-                                        userRole={event.user_role}
-                                        showNotification={showNotification}
-                                    />
-                                )}
-
-                                {renderRoleSpecificContent()}
+                                {['admin-chat', 'approval', 'registrations', 'attendance', 'budget', 'volunteers', 'feedback', 'qr'].includes(activeTab) && renderRoleSpecificContent()}
                             </Box>
                         </Paper>
                     </Grid>

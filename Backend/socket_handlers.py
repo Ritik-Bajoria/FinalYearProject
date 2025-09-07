@@ -1,5 +1,5 @@
 """
-Socket.IO event handlers for real-time notifications
+Socket.IO event handlers for real-time notifications with admin authentication bypass
 """
 
 from flask_socketio import emit, join_room, leave_room, disconnect
@@ -13,10 +13,11 @@ import traceback
 import sys
 from .logger import Logger
 
-logger=Logger()
+logger = Logger()
 
 # Store active user sessions
 active_users = {}
+admin_sessions = {}  # Track admin sessions separately
 typing_status = {}
 print("🔧 Debug Socket.IO handlers initialized")
 
@@ -33,6 +34,18 @@ def log_info(info_msg):
     print(f"ℹ️ SOCKET INFO: {info_msg}")
     sys.stdout.flush()
 
+def is_admin_session(sid):
+    """Check if session belongs to an admin user"""
+    return sid in admin_sessions
+
+def get_user_from_session(sid):
+    """Get user ID from session (admin or regular)"""
+    if sid in admin_sessions:
+        return admin_sessions[sid]
+    elif sid in active_users:
+        return active_users[sid]
+    return None
+
 @socketio.on('connect')
 def handle_connect():
     """Handle client connection"""
@@ -47,18 +60,76 @@ def handle_disconnect():
     """Handle client disconnection"""
     try:
         log_info(f"Client disconnected: {request.sid}")
+        
         # Remove user from active users if they were authenticated
+        user_id = None
         if request.sid in active_users:
             user_id = active_users[request.sid]
-            leave_room(f'user_{user_id}')
             del active_users[request.sid]
-            log_info(f"User {user_id} disconnected and removed from active users")
+        elif request.sid in admin_sessions:
+            user_id = admin_sessions[request.sid]
+            del admin_sessions[request.sid]
+        
+        if user_id:
+            leave_room(f'user_{user_id}')
+            log_info(f"User {user_id} disconnected and removed from sessions")
+            
     except Exception as e:
         log_error("Error in handle_disconnect", e)
 
+@socketio.on('admin_authenticate')
+def handle_admin_authentication(data):
+    """Authenticate admin user with bypass privileges"""
+    try:
+        log_info(f"Admin authentication attempt from {request.sid}")
+        
+        if not data or not isinstance(data, dict):
+            log_error(f"Invalid admin authentication data: {data}")
+            emit('auth_error', {'message': 'Invalid authentication data'})
+            return
+        
+        token = data.get('token')
+        if not token:
+            log_error("No token provided for admin auth")
+            emit('auth_error', {'message': 'Token required'})
+            return
+        
+        log_info(f"Verifying admin token: {token[:20]}...")
+        user_data = verify_token(token)
+        if not user_data:
+            log_error("Invalid admin token verification")
+            emit('auth_error', {'message': 'Invalid token'})
+            return
+        
+        # Verify admin status
+        user_obj = User.query.get(user_data.user_id)
+        if not user_obj or not (hasattr(user_obj, 'admin') and user_obj.admin):
+            log_error(f"User {user_data.user_id} is not an admin")
+            emit('auth_error', {'message': 'Admin access required'})
+            return
+        
+        # Store admin session
+        admin_sessions[request.sid] = user_data.user_id
+        
+        # Join user-specific room for targeted notifications
+        join_room(f'user_{user_data.user_id}')
+        
+        emit('admin_authenticated', {
+            'success': True,
+            'user_id': user_data.user_id,
+            'admin': True,
+            'message': 'Successfully authenticated as admin with bypass privileges'
+        })
+        
+        log_info(f"Admin user {user_data.user_id} authenticated with bypass privileges")
+        
+    except Exception as e:
+        log_error("Admin authentication error", e)
+        emit('auth_error', {'message': 'Admin authentication failed'})
+
 @socketio.on('authenticate')
 def handle_authentication(data):
-    """Authenticate user and join their personal room"""
+    """Authenticate regular user"""
     try:
         log_info(f"Authentication attempt from {request.sid}")
         
@@ -102,7 +173,8 @@ def handle_authentication(data):
 def handle_join_club_room(data):
     """Join club-specific room for club notifications"""
     try:
-        if request.sid not in active_users:
+        user_id = get_user_from_session(request.sid)
+        if not user_id:
             emit('error', {'message': 'Not authenticated'})
             return
         
@@ -121,7 +193,7 @@ def handle_join_club_room(data):
             'message': f'Joined club {club_id} notification room'
         })
         
-        print(f"User {active_users[request.sid]} joined club room {club_room}")
+        print(f"User {user_id} joined club room {club_room}")
         
     except Exception as e:
         print(f"Error joining club room: {str(e)}")
@@ -131,7 +203,8 @@ def handle_join_club_room(data):
 def handle_leave_club_room(data):
     """Leave club-specific room"""
     try:
-        if request.sid not in active_users:
+        user_id = get_user_from_session(request.sid)
+        if not user_id:
             emit('error', {'message': 'Not authenticated'})
             return
         
@@ -150,7 +223,7 @@ def handle_leave_club_room(data):
             'message': f'Left club {club_id} notification room'
         })
         
-        print(f"User {active_users[request.sid]} left club room {club_room}")
+        print(f"User {user_id} left club room {club_room}")
         
     except Exception as e:
         print(f"Error leaving club room: {str(e)}")
@@ -159,11 +232,11 @@ def handle_leave_club_room(data):
 @socketio.on('typing')
 def handle_typing(data):
     try:
-        if request.sid not in active_users:
+        user_id = get_user_from_session(request.sid)
+        if not user_id:
             return
             
         room = f"club_{data['club_id']}"
-        user_id = active_users[request.sid]
         typing_status[room] = typing_status.get(room, {})
         typing_status[room][user_id] = data['isTyping']
         
@@ -185,7 +258,8 @@ def handle_join_event_chat(data):
     try:
         log_info(f"Join event chat request from {request.sid}")
         
-        if request.sid not in active_users:
+        user_id = get_user_from_session(request.sid)
+        if not user_id:
             log_error("User not authenticated for join_event_chat")
             emit('error', {'message': 'Not authenticated'})
             return
@@ -209,7 +283,7 @@ def handle_join_event_chat(data):
             'message': f'Joined event {event_id} chat room'
         })
         
-        log_info(f"User {active_users[request.sid]} joined event chat room {event_room}")
+        log_info(f"User {user_id} joined event chat room {event_room}")
         
     except Exception as e:
         log_error("Error joining event chat room", e)
@@ -221,13 +295,13 @@ def handle_send_event_message(data, callback=None):
     try:
         log_info(f"Send event message request from {request.sid}")
         
-        if request.sid not in active_users:
+        user_id = get_user_from_session(request.sid)
+        if not user_id:
             log_error("User not authenticated for send_event_message")
             if callback: 
                 callback({'error': 'Not authenticated'})
             return
         
-        user_id = active_users[request.sid]
         event_id = data.get('event_id')
         chat_type = data.get('chat_type', 'organizer_admin')
         message_text = data.get('message')
@@ -250,9 +324,12 @@ def handle_send_event_message(data, callback=None):
         
         # Check if user is admin - consistent check
         is_admin = user_obj and hasattr(user_obj, 'admin') and user_obj.admin
-        log_info(f"User {user_id} admin status: {is_admin}")
+        is_admin_session_user = is_admin_session(request.sid)
         
-        if not is_admin:
+        log_info(f"User {user_id} admin status: {is_admin}, admin session: {is_admin_session_user}")
+        
+        # Admin users bypass all permission checks
+        if not (is_admin or is_admin_session_user):
             # For non-admin users, check event association
             user_association = UserEventAssociation.query.filter_by(
                 user_id=user_id,
@@ -265,12 +342,12 @@ def handle_send_event_message(data, callback=None):
                     callback({'error': 'Access denied - not associated with event'})
                 return
 
-            user_role = user_association.role
+            user_role = user_association.role or 'attendee'
             log_info(f"User {user_id} role in event {event_id}: {user_role}")
 
-            # Role-based access control
+            # Role-based access control for non-admin users
             if chat_type == 'organizer_admin':
-                if user_role != 'organizer':
+                if user_role not in ['organizer']:
                     log_error(f"User {user_id} denied organizer access")
                     if callback: 
                         callback({'error': 'Access denied - organizer access required'})
@@ -287,6 +364,8 @@ def handle_send_event_message(data, callback=None):
                     if callback: 
                         callback({'error': 'Access denied - not registered for event'})
                     return
+        else:
+            log_info(f"Admin user {user_id} bypassing permission checks")
         
         # Save message to database
         try:
@@ -353,7 +432,8 @@ def handle_send_event_message(data, callback=None):
 def handle_typing_event(data):
     """Handle typing indicator for event chat"""
     try:
-        if request.sid not in active_users:
+        user_id = get_user_from_session(request.sid)
+        if not user_id:
             return
         
         event_id = data.get('event_id')
@@ -366,7 +446,7 @@ def handle_typing_event(data):
         # Emit typing indicator to event chat room
         event_room = f'event_{event_id}_{chat_type}'
         emit('user_typing_event', {
-            'user_id': active_users[request.sid],
+            'user_id': user_id,
             'is_typing': is_typing
         }, room=event_room, include_self=False)
         
@@ -377,11 +457,10 @@ def handle_typing_event(data):
 def handle_unread_count_request():
     """Send current unread notification count to user"""
     try:
-        if request.sid not in active_users:
+        user_id = get_user_from_session(request.sid)
+        if not user_id:
             emit('error', {'message': 'Not authenticated'})
             return
-        
-        user_id = active_users[request.sid]
         
         # Get unread count from database
         from .models.notification import Notification
@@ -399,7 +478,8 @@ def handle_unread_count_request():
 @socketio.on('joinClubRoom')
 def handle_join_room(data):
     try:
-        if request.sid not in active_users:
+        user_id = get_user_from_session(request.sid)
+        if not user_id:
             emit('error', {'message': 'Not authenticated'})
             return
             
@@ -413,12 +493,12 @@ def handle_join_room(data):
 @socketio.on('sendMessage')
 def handle_send_message(data):
     try:
-        if request.sid not in active_users:
+        user_id = get_user_from_session(request.sid)
+        if not user_id:
             print('error', {'message': 'Not authenticated'})
             emit('error', {'message': 'Not authenticated'})
             return
             
-        user_id = active_users[request.sid]
         room = f"club_{data['club_id']}"
         
         # Save to database
@@ -442,8 +522,8 @@ def handle_send_message(data):
             'sent_at': chat.sent_at.isoformat(),
             'is_leader': chat.club.leader_id == user_id
         }
-        print('akafnafnkafmf yare',message)
-        emit('newMessage', message)
+        print('Message sent:', message)
+        emit('newMessage', message, room=room)
     except Exception as e:
         print('error', {'message': str(e)}, room=request.sid)
         logger.error(f"Error in sendMessage: {str(e)}")

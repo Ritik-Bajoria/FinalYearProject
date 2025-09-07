@@ -3,11 +3,11 @@ import { Box } from '@mui/material';
 import EventFeedback from '../event/EventFeedback';
 import QRCodeGenerator from '../event/QRCodeGenerator';
 
-const EventAttendeeDashboard = ({ event, eventId, showNotification }) => {
+const EventAttendeeDashboard = ({ event, eventId, activeTab, showNotification }) => {
   return (
     <Box>
-      <EventFeedback eventId={eventId} showNotification={showNotification} />
-      {event.qr_check_in_enabled && (
+      {activeTab === 'feedback' && <EventFeedback eventId={eventId} showNotification={showNotification} />}
+      {activeTab === 'qr' && event?.qr_check_in_enabled && (
         <QRCodeGenerator eventId={eventId} showNotification={showNotification} />
       )}
     </Box>

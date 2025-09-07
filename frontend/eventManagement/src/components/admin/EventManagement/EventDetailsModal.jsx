@@ -13,9 +13,20 @@ const EventDetailsModal = ({ event, isOpen, onClose, initialTab = 'details' }) =
     if (isOpen && event) {
       fetchEventDetails();
       // Set the initial tab when event changes
-      setActiveTab(event.initialTab || 'details');
+      setActiveTab(initialTab || 'details');
+      
+      // Prevent background scrolling when modal is open
+      document.body.style.overflow = 'hidden';
+    } else {
+      // Re-enable background scrolling when modal is closed
+      document.body.style.overflow = 'unset';
     }
-  }, [isOpen, event]);
+
+    // Cleanup function to re-enable scrolling when component unmounts
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen, event, initialTab]);
 
   const fetchEventDetails = async () => {
     if (!event?.event_id) return;
@@ -65,7 +76,7 @@ const EventDetailsModal = ({ event, isOpen, onClose, initialTab = 'details' }) =
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[85vh] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-slate-200">
@@ -383,7 +394,7 @@ const EventDetailsModal = ({ event, isOpen, onClose, initialTab = 'details' }) =
 
               {/* Chat Tab */}
               {activeTab === 'chat' && eventDetails && (
-                <div className="h-96">
+                <div className="h-[500px]">
                   <EventChat eventId={eventDetails.event_id} />
                 </div>
               )}

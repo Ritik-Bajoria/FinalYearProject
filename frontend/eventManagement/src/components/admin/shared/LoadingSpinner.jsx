@@ -1,9 +1,15 @@
-import { Loader } from 'lucide-react';
+// shared/LoadingSpinner.jsx
+const LoadingSpinner = ({ size = 'md', message = 'Loading...' }) => {
+  const sizeClasses = {
+    sm: 'w-4 h-4',
+    md: 'w-8 h-8',
+    lg: 'w-12 h-12'
+  };
 
-const LoadingSpinner = ({ size = 8 }) => {
   return (
-    <div className="flex items-center justify-center py-8">
-      <Loader className={`w-${size} h-${size} animate-spin text-indigo-600`} />
+    <div className="flex flex-col items-center justify-center p-8">
+      <div className={`animate-spin rounded-full border-b-2 border-indigo-600 ${sizeClasses[size]} mb-2`}></div>
+      <p className="text-sm text-slate-600">{message}</p>
     </div>
   );
 };

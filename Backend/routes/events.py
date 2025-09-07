@@ -19,6 +19,7 @@ from ..models.attendance import Attendance
 from ..models.feedback import Feedback
 from ..models.user_event_association import get_user_role_in_event
 from ..models.volunteer_posting import VolunteerPosting
+from ..models.expense import Expense
 from ..models.base import db
 from ..utils.response_utils import make_response
 from ..utils.notification_utils import create_notification
@@ -133,7 +134,7 @@ def event_to_dict(event, include_associations=False):
             event_data["budget"] = {
                 "budget_id": event.budget.budget_id,
                 "allocated_amount": float(event.budget.allocated_amount) if event.budget.allocated_amount else 0,
-                "spent_amount": float(event.budget.spent_amount) if event.budget.spent_amount else 0,
+                "total_spent": float(event.budget.total_spent) if event.budget.total_spent else 0,
                 "remaining_budget": float(event.budget.remaining_budget) if hasattr(event.budget, 'remaining_budget') else 0
             }
 
@@ -223,7 +224,7 @@ def get_event_details(current_user, event_id):
             'budget': {
                 'budget_id': event.budget.budget_id,
                 'allocated_amount': float(event.budget.allocated_amount),
-                'spent_amount': float(event.budget.spent_amount),
+                'total_spent': float(event.budget.total_spent),
                 'remaining_budget': event.budget.remaining_budget
             } if event.budget else None,
             'documents': [{
@@ -711,13 +712,13 @@ def get_event_registrations(current_user, event_id):
             return make_response(message="Only organizers can view registrations", error="Only organizers can view registrations", status_code=403)
         
         registrations = EventRegistration.query.filter_by(event_id=event_id).all()
-        
+        # print("andnkknda",registrations.user_id)
         registration_data = [{
             'registration_id': reg.registration_id,
             'user_id': reg.user_id,
             'user_name': reg.user.full_name,
             'user_email': reg.user.email,
-            'registration_date': reg.registration_date.isoformat(),
+            'registration_date': reg.registration_time.isoformat(),
             'status': reg.status
         } for reg in registrations]
         
@@ -987,3 +988,345 @@ def delete_event(current_user, event_id):
         
     except Exception as e:
         return make_response(message=f"Failed to delete event: {str(e)}", error=str(e), status_code=500)
+
+
+
+# Add these routes to your events_bp blueprint
+
+# Get event budget details
+@events_bp.route('/<int:event_id>/budget', methods=['GET'])
+@token_required
+def get_event_budget(current_user, event_id):
+    try:
+        current_user_id = current_user.user_id
+        
+        # Verify user has access to this event
+        user_association = UserEventAssociation.query.filter_by(
+            user_id=current_user_id, 
+            event_id=event_id
+        ).first()
+        
+        if not user_association:
+            return make_response(message="Access denied", error="Access denied", status_code=403)
+        
+        # Get or create event budget
+        event_budget = EventBudget.query.filter_by(event_id=event_id).first()
+        
+        if not event_budget:
+            # Create a new budget if it doesn't exist
+            event_budget = EventBudget(
+                event_id=event_id,
+                allocated_amount=0,
+                total_spent=0
+            )
+            db.session.add(event_budget)
+            db.session.commit()
+        
+        # Get all expenses for this budget
+        expenses = Expense.query.filter_by(budget_id=event_budget.budget_id).order_by(Expense.created_at.desc()).all()
+        
+        # Calculate remaining budget
+        remaining_budget = float(event_budget.allocated_amount) - float(event_budget.total_spent) if event_budget.allocated_amount else 0
+        
+        # Prepare response
+        budget_data = {
+            'budget_id': event_budget.budget_id,
+            'event_id': event_budget.event_id,
+            'allocated_amount': float(event_budget.allocated_amount) if event_budget.allocated_amount else 0,
+            'total_spent': float(event_budget.total_spent) if event_budget.total_spent else 0,
+            'remaining_budget': remaining_budget,
+            'budget_status': 'within_budget' if remaining_budget >= 0 else 'over_budget',
+            'expenses': [
+                {
+                    'expense_id': expense.expense_id,
+                    'description': expense.description,
+                    'amount': float(expense.amount) if expense.amount else 0,
+                    'receipt_url': expense.receipt_url,
+                    'created_at': expense.created_at.isoformat() if expense.created_at else None,
+                    'uploaded_by': expense.uploaded_by,
+                    'uploaded_by_name': User.query.get(expense.uploaded_by).full_name if expense.uploaded_by and User.query.get(expense.uploaded_by) else 'Unknown'
+                }
+                for expense in expenses
+            ]
+        }
+        
+        return make_response(data=budget_data)
+        
+    except Exception as e:
+        return make_response(message=f"Failed to get event budget: {str(e)}", error=str(e), status_code=500)
+
+# Update event budget allocation
+@events_bp.route('/<int:event_id>/budget', methods=['PUT'])
+@token_required
+def update_event_budget(current_user, event_id):
+    try:
+        current_user_id = current_user.user_id
+        data = request.get_json()
+        
+        # Verify user is organizer
+        user_association = UserEventAssociation.query.filter_by(
+            user_id=current_user_id, 
+            event_id=event_id,
+            role='organizer'
+        ).first()
+        
+        if not user_association:
+            return make_response(message="Only organizers can update budget", error="Only organizers can update budget", status_code=403)
+        
+        # Get or create event budget
+        event_budget = EventBudget.query.filter_by(event_id=event_id).first()
+        
+        if not event_budget:
+            event_budget = EventBudget(event_id=event_id)
+            db.session.add(event_budget)
+        
+        # Update allocated amount
+        allocated_amount = data.get('allocated_amount')
+        if allocated_amount is not None:
+            try:
+                event_budget.allocated_amount = float(allocated_amount)
+            except (ValueError, TypeError):
+                return make_response(message="Invalid allocated amount", error="Invalid allocated amount", status_code=400)
+        
+        db.session.commit()
+        
+        # Return updated budget
+        remaining_budget = float(event_budget.allocated_amount) - float(event_budget.total_spent) if event_budget.allocated_amount else 0
+        
+        return make_response(data={
+            'budget_id': event_budget.budget_id,
+            'allocated_amount': float(event_budget.allocated_amount) if event_budget.allocated_amount else 0,
+            'total_spent': float(event_budget.total_spent) if event_budget.total_spent else 0,
+            'remaining_budget': remaining_budget,
+            'budget_status': 'within_budget' if remaining_budget >= 0 else 'over_budget',
+            'message': 'Budget updated successfully'
+        })
+        
+    except Exception as e:
+        return make_response(message=f"Failed to update budget: {str(e)}", error=str(e), status_code=500)
+
+# Add new expense
+@events_bp.route('/<int:event_id>/budget/expenses', methods=['POST'])
+@token_required
+def add_expense(current_user, event_id):
+    try:
+        current_user_id = current_user.user_id
+        
+        # Verify user is organizer
+        user_association = UserEventAssociation.query.filter_by(
+            user_id=current_user_id, 
+            event_id=event_id,
+            role='organizer'
+        ).first()
+        
+        if not user_association:
+            return make_response(message="Only organizers can add expenses", error="Only organizers can add expenses", status_code=403)
+        
+        # Get event budget
+        event_budget = EventBudget.query.filter_by(event_id=event_id).first()
+        
+        if not event_budget:
+            return make_response(message="Event budget not found", error="Event budget not found", status_code=404)
+        
+        # Handle form data and file upload
+        description = request.form.get('description')
+        amount = request.form.get('amount')
+        
+        if not description or not amount:
+            return make_response(message="Description and amount are required", error="Description and amount are required", status_code=400)
+        
+        try:
+            amount = float(amount)
+            if amount <= 0:
+                return make_response(message="Amount must be positive", error="Amount must be positive", status_code=400)
+        except (ValueError, TypeError):
+            return make_response(message="Invalid amount", error="Invalid amount", status_code=400)
+        
+        # Handle receipt file upload
+        receipt_url = None
+        if 'receipt' in request.files:
+            file = request.files['receipt']
+            if file.filename != '':
+                filename = secure_filename(file.filename)
+                upload_path = os.path.join('uploads', 'events', str(event_id), 'receipts')
+                os.makedirs(upload_path, exist_ok=True)
+                file_path = os.path.join(upload_path, filename)
+                file.save(file_path)
+                receipt_url = file_path
+        
+        # Create expense
+        expense = Expense(
+            budget_id=event_budget.budget_id,
+            description=description,
+            amount=amount,
+            uploaded_by=current_user_id,
+            receipt_url=receipt_url
+        )
+        
+        db.session.add(expense)
+        
+        # Update total spent
+        event_budget.total_spent = db.session.query(
+            db.func.sum(Expense.amount)
+        ).filter(Expense.budget_id == event_budget.budget_id).scalar() or 0
+        
+        db.session.commit()
+        
+        return make_response(data={
+            'expense_id': expense.expense_id,
+            'message': 'Expense added successfully'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return make_response(message=f"Failed to add expense: {str(e)}", error=str(e), status_code=500)
+
+# Update expense
+@events_bp.route('/<int:event_id>/budget/expenses/<int:expense_id>', methods=['PUT'])
+@token_required
+def update_expense(current_user, event_id, expense_id):
+    try:
+        current_user_id = current_user.user_id
+        
+        # Verify user is organizer
+        user_association = UserEventAssociation.query.filter_by(
+            user_id=current_user_id, 
+            event_id=event_id,
+            role='organizer'
+        ).first()
+        
+        if not user_association:
+            return make_response(message="Only organizers can update expenses", error="Only organizers can update expenses", status_code=403)
+        
+        # Get expense
+        expense = Expense.query.get(expense_id)
+        if not expense or expense.budget.event_id != event_id:
+            return make_response(message="Expense not found", error="Expense not found", status_code=404)
+        
+        data = request.get_json()
+        
+        # Update fields
+        if 'description' in data:
+            expense.description = data['description']
+        
+        if 'amount' in data:
+            try:
+                new_amount = float(data['amount'])
+                if new_amount <= 0:
+                    return make_response(message="Amount must be positive", error="Amount must be positive", status_code=400)
+                expense.amount = new_amount
+            except (ValueError, TypeError):
+                return make_response(message="Invalid amount", error="Invalid amount", status_code=400)
+        
+        db.session.commit()
+        
+        # Update total spent in budget
+        event_budget = expense.budget
+        event_budget.total_spent = db.session.query(
+            db.func.sum(Expense.amount)
+        ).filter(Expense.budget_id == event_budget.budget_id).scalar() or 0
+        
+        db.session.commit()
+        
+        return make_response(data={'message': 'Expense updated successfully'})
+        
+    except Exception as e:
+        db.session.rollback()
+        return make_response(message=f"Failed to update expense: {str(e)}", error=str(e), status_code=500)
+
+# Delete expense
+@events_bp.route('/<int:event_id>/budget/expenses/<int:expense_id>', methods=['DELETE'])
+@token_required
+def delete_expense(current_user, event_id, expense_id):
+    try:
+        current_user_id = current_user.user_id
+        
+        # Verify user is organizer
+        user_association = UserEventAssociation.query.filter_by(
+            user_id=current_user_id, 
+            event_id=event_id,
+            role='organizer'
+        ).first()
+        
+        if not user_association:
+            return make_response(message="Only organizers can delete expenses", error="Only organizers can delete expenses", status_code=403)
+        
+        # Get expense
+        expense = Expense.query.get(expense_id)
+        if not expense or expense.budget.event_id != event_id:
+            return make_response(message="Expense not found", error="Expense not found", status_code=404)
+        
+        budget_id = expense.budget_id
+        
+        # Delete expense
+        db.session.delete(expense)
+        
+        # Update total spent in budget
+        event_budget = EventBudget.query.get(budget_id)
+        event_budget.total_spent = db.session.query(
+            db.func.sum(Expense.amount)
+        ).filter(Expense.budget_id == budget_id).scalar() or 0
+        
+        db.session.commit()
+        
+        return make_response(data={'message': 'Expense deleted successfully'})
+        
+    except Exception as e:
+        db.session.rollback()
+        return make_response(message=f"Failed to delete expense: {str(e)}", error=str(e), status_code=500)
+
+# Get budget summary
+@events_bp.route('/<int:event_id>/budget/summary', methods=['GET'])
+@token_required
+def get_budget_summary(current_user, event_id):
+    try:
+        current_user_id = current_user.user_id
+        
+        # Verify user has access to this event
+        user_association = UserEventAssociation.query.filter_by(
+            user_id=current_user_id, 
+            event_id=event_id
+        ).first()
+        
+        if not user_association:
+            return make_response(message="Access denied", error="Access denied", status_code=403)
+        
+        # Get event budget
+        event_budget = EventBudget.query.filter_by(event_id=event_id).first()
+        
+        if not event_budget:
+            return make_response(data={
+                'allocated_amount': 0,
+                'total_spent': 0,
+                'remaining_budget': 0,
+                'budget_status': 'not_set',
+                'message': 'Budget not set yet'
+            })
+        
+        # Calculate remaining budget
+        remaining_budget = float(event_budget.allocated_amount) - float(event_budget.total_spent) if event_budget.allocated_amount else 0
+        
+        # Determine budget status
+        if event_budget.allocated_amount == 0:
+            budget_status = 'not_set'
+        elif remaining_budget >= 0:
+            budget_status = 'within_budget'
+        else:
+            budget_status = 'over_budget'
+        
+        # Get expense breakdown by category (you can add category field to Expense model if needed)
+        expenses = Expense.query.filter_by(budget_id=event_budget.budget_id).all()
+        
+        summary_data = {
+            'allocated_amount': float(event_budget.allocated_amount) if event_budget.allocated_amount else 0,
+            'total_spent': float(event_budget.total_spent) if event_budget.total_spent else 0,
+            'remaining_budget': remaining_budget,
+            'budget_status': budget_status,
+            'expense_count': len(expenses),
+            'expenses_by_category': {}  # You can implement category breakdown if needed
+        }
+        
+        return make_response(data=summary_data)
+        
+    except Exception as e:
+        return make_response(message=f"Failed to get budget summary: {str(e)}", error=str(e), status_code=500)
