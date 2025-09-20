@@ -1,457 +1,457 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import {
-    Box,
-    Paper,
-    Typography,
-    TextField,
-    Button,
-    List,
-    ListItem,
-    ListItemText,
-    Avatar,
-    Chip,
-    Tabs,
-    Tab,
-    Alert,
-    CircularProgress,
-    IconButton,
-    Menu,
-    MenuItem
-} from '@mui/material';
-import {
-    Send as SendIcon,
-    Chat as ChatIcon,
-    AdminPanelSettings as AdminIcon,
-    VolunteerActivism as VolunteerIcon,
-    People as PeopleIcon,
-    MoreVert as MoreIcon,
-    Reply as ReplyIcon,
-    CopyAll as CopyIcon,
-    PushPin as PinIcon
-} from '@mui/icons-material';
+import { useState, useEffect, useRef } from 'react';
+import { Send, MessageCircle, AlertCircle, RefreshCw, Users, Heart, Shield } from 'lucide-react';
 import useEventSocket from '../hooks/useEventSocket';
+import useAuthUser from '../hooks/useAuthUser';
 
 const EventChat = ({ eventId, userRole, eventStatus, showNotification, currentUser }) => {
-    const [anchorEl, setAnchorEl] = useState(null);
-    const [selectedMessage, setSelectedMessage] = useState(null);
-    const [newMessage, setNewMessage] = useState('');
-    const [replyTo, setReplyTo] = useState(null);
-    const [activeChat, setActiveChat] = useState(null);
-    const messagesEndRef = useRef(null);
+  const { user, student, faculty, admin, userRole: authUserRole } = useAuthUser();
+  
+  // Use passed userRole or fallback to auth user role
+  const effectiveUserRole = userRole || authUserRole;
+  const [newMessage, setNewMessage] = useState('');
+  const [typingTimeout, setTypingTimeout] = useState(null);
+  const messagesEndRef = useRef(null);
+  const [error, setError] = useState(null);
+  const [isSending, setIsSending] = useState(false);
+  const [activeChat, setActiveChat] = useState(null);
+
+  // Get the correct user ID based on user type
+  const getUserId = () => {
+    // Use passed currentUser first
+    if (currentUser?.user_id) return currentUser.user_id;
+    if (currentUser?.id) return currentUser.id;
     
-    // Determine available chat types based on user role
-    const getAvailableChats = () => {
-        const chats = [];
-        
-        if (userRole === 'organizer') {
-            chats.push(
-                { type: 'organizer_admin', label: 'Admin Chat', icon: <AdminIcon /> },
-                { type: 'organizer_volunteer', label: 'Volunteer Chat', icon: <VolunteerIcon /> }
-            );
-        } else if (userRole === 'volunteer') {
-            chats.push(
-                { type: 'organizer_volunteer', label: 'Chat with Organizers', icon: <VolunteerIcon /> }
-            );
-        } else if (userRole === 'attendee') {
-            chats.push(
-                { type: 'attendee_only', label: 'Attendees Chat', icon: <PeopleIcon /> }
-            );
-        }
-        return chats;
-    };
+    // Fallback to auth user data
+    if (user?.user_id) return user.user_id;
+    if (user?.id) return user.id;
+    if (student?.user_id) return student.user_id;
+    if (student?.id) return student.id;
+    if (faculty?.user_id) return faculty.user_id;
+    if (faculty?.id) return faculty.id;
+    if (admin?.user_id) return admin.user_id;
+    if (admin?.id) return admin.id;
+    return null;
+  };
 
-    const availableChats = getAvailableChats();
+  const userId = getUserId();
+
+  // Determine available chat types based on user role
+  const getAvailableChats = () => {
+    const chats = [];
     
-    // Set default active chat based on available chats
-    useEffect(() => {
-        if (availableChats.length > 0 && !activeChat) {
-            setActiveChat(availableChats[0].type);
-        }
-    }, [availableChats, activeChat]);
+    if (effectiveUserRole === 'organizer') {
+      chats.push(
+        { type: 'organizer_admin', label: 'Admin Chat', icon: Shield },
+        { type: 'organizer_volunteer', label: 'Volunteer Chat', icon: Heart }
+      );
+    } else if (effectiveUserRole === 'volunteer') {
+      chats.push(
+        { type: 'organizer_volunteer', label: 'Chat with Organizers', icon: Heart }
+      );
+    } else if (effectiveUserRole === 'attendee') {
+      chats.push(
+        { type: 'attendee_only', label: 'Attendees Chat', icon: Users }
+      );
+    }
+    return chats;
+  };
 
-    // Use the custom hook
-    const {
-        socket,
-        isConnected,
-        messages,
-        isLoading,
-        typingUsers,
-        connectionError,
-        sendRealTimeMessage,
-        sendTypingStatus,
-        loadInitialMessages
-    } = useEventSocket(eventId, activeChat, currentUser?.user_id);
-    console.log("messages recieved",messages)
-    // Show connection errors as notifications
-    useEffect(() => {
-        if (connectionError) {
-            showNotification(connectionError, 'error');
-        }
-    }, [connectionError, showNotification]);
+  const availableChats = getAvailableChats();
+  
+  // Set default active chat based on available chats
+  useEffect(() => {
+    if (availableChats.length > 0 && !activeChat) {
+      setActiveChat(availableChats[0].type);
+    }
+  }, [availableChats, activeChat]);
+
+  // Ensure userRole is set for proper API calls
+  useEffect(() => {
+    if (!localStorage.getItem('userRole') && effectiveUserRole) {
+      localStorage.setItem('userRole', effectiveUserRole);
+    }
+  }, [effectiveUserRole]);
+
+  // Use the event socket hook
+  const {
+    isConnected,
+    messages,
+    isLoading: loading,
+    typingUsers,
+    sendRealTimeMessage,
+    sendTypingStatus,
+    connectionError,
+    loadInitialMessages
+  } = useEventSocket(eventId, activeChat, userId);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  useEffect(() => {
+    setError(connectionError);
+  }, [connectionError]);
+
+  // Show connection errors as notifications
+  useEffect(() => {
+    if (connectionError && showNotification) {
+      showNotification(connectionError, 'error');
+    }
+  }, [connectionError, showNotification]);
+
+  const sendMessage = async () => {
+    const messageText = newMessage.trim();
     
-    useEffect(() => {
-        scrollToBottom();
-    }, [messages]);
-
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    };
-
-    const handleSendMessage = async () => {
-        if (!newMessage.trim() || !activeChat) return;
-
-        try {
-            const messageData = {
-                message: newMessage.trim(),
-                reply_to_id: replyTo?.id
-            };
-
-            await sendRealTimeMessage(messageData);
-            setNewMessage('');
-            setReplyTo(null);
-            
-            // Stop typing indicator
-            sendTypingStatus(false);
-        } catch (err) {
-            console.error('Failed to send message:', err);
-            showNotification(err.message || 'Failed to send message', 'error');
-        }
-    };
-
-    const handleTyping = useCallback((isTyping) => {
-        sendTypingStatus(isTyping);
-    }, [sendTypingStatus]);
-
-    const handleKeyPress = (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSendMessage();
-        }
-    };
-
-    const handleInputChange = (e) => {
-        setNewMessage(e.target.value);
-        // Start typing indicator with debounce
-        handleTyping(true);
-    };
-
-    const formatTimestamp = (timestamp) => {
-        const date = new Date(timestamp);
-        const now = new Date();
-        const diffInHours = (now - date) / (1000 * 60 * 60);
-        
-        if (diffInHours < 24) {
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        } else {
-            return date.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-        }
-    };
-
-    const handleMessageAction = (message, action) => {
-        switch (action) {
-            case 'reply':
-                setReplyTo(message);
-                break;
-            case 'copy':
-                navigator.clipboard.writeText(message.message);
-                showNotification('Message copied to clipboard', 'success');
-                break;
-            case 'pin':
-                showNotification('Message pinned', 'info');
-                break;
-            default:
-                break;
-        }
-        setAnchorEl(null);
-    };
-
-    if (availableChats.length === 0) {
-        return (
-            <Alert severity="info">
-                No chat access available for your role in this event.
-            </Alert>
-        );
+    if (!messageText) {
+      return;
+    }
+    
+    if (!isConnected) {
+      setError('Not connected to chat server');
+      return;
+    }
+    
+    if (isSending) {
+      return;
     }
 
-    const isOthersTyping = typingUsers.length > 0;
+    setIsSending(true);
+    setError(null);
 
-    // Don't render tabs until activeChat is set
-    if (!activeChat) {
-        return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-                <CircularProgress />
-            </Box>
-        );
+    try {
+      // Send just the message text - the socket hook will handle the payload structure
+      await sendRealTimeMessage({
+        message: messageText
+      });
+      
+      setNewMessage('');
+      handleTyping(false);
+      
+    } catch (err) {
+      setError(err.message || 'Failed to send message');
+      if (showNotification) {
+        showNotification(err.message || 'Failed to send message', 'error');
+      }
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleTyping = (isTyping) => {
+    if (!isConnected || !sendTypingStatus) return;
+
+    // Clear existing timeout
+    if (typingTimeout) {
+      clearTimeout(typingTimeout);
+      setTypingTimeout(null);
     }
 
+    try {
+      // Just pass the boolean - the socket hook will handle the payload
+      sendTypingStatus(isTyping);
+
+      if (isTyping) {
+        // Set timeout to stop typing after 3 seconds
+        const timeout = setTimeout(() => {
+          sendTypingStatus(false);
+        }, 3000);
+        setTypingTimeout(timeout);
+      }
+    } catch (err) {
+      // Silently handle typing status errors
+    }
+  };
+
+  const handleInputChange = (e) => {
+    const value = e.target.value;
+    setNewMessage(value);
+    
+    // Clear any existing error when user starts typing
+    if (error) {
+      setError(null);
+    }
+    
+    if (value.trim()) {
+      handleTyping(true);
+    } else {
+      handleTyping(false);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  const formatTime = (timestamp) => {
+    if (!timestamp) return '';
+    try {
+      return new Date(timestamp).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (err) {
+      return '';
+    }
+  };
+
+  const isOwnMessage = (message) => {
+    return message.sender_id === userId;
+  };
+
+  const handleRetryConnection = () => {
+    setError(null);
+    if (loadInitialMessages) {
+      loadInitialMessages();
+    }
+  };
+
+  // Cleanup typing timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (typingTimeout) {
+        clearTimeout(typingTimeout);
+      }
+    };
+  }, [typingTimeout]);
+
+  if (loading) {
     return (
-        <Box sx={{ height: '600px', display: 'flex', flexDirection: 'column' }}>
-            {/* Chat Type Tabs */}
-            {availableChats.length > 1 && (
-                <Tabs
-                    value={activeChat}
-                    onChange={(_, newValue) => setActiveChat(newValue)}
-                    sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
-                >
-                    {availableChats.map((chat) => (
-                        <Tab
-                            key={chat.type}
-                            value={chat.type}
-                            label={chat.label}
-                            icon={chat.icon}
-                            iconPosition="start"
-                        />
-                    ))}
-                </Tabs>
-            )}
-
-            {/* Connection Status */}
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                <Box
-                    sx={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        backgroundColor: isConnected ? 'success.main' : 'error.main',
-                        mr: 1
-                    }}
-                />
-                <Typography variant="caption" color="text.secondary">
-                    {isConnected ? 'Connected' : 'Disconnected'} • {messages.length} messages
-                </Typography>
-            </Box>
-
-            {/* Event Status Alert */}
-            {eventStatus === 'completed' && (
-                <Alert severity="warning" sx={{ mb: 2 }}>
-                    This event has ended. Chat is now view-only.
-                </Alert>
-            )}
-
-            {/* Reply Banner */}
-            {replyTo && (
-                <Alert 
-                    severity="info" 
-                    sx={{ mb: 2 }}
-                    action={
-                        <IconButton
-                            size="small"
-                            onClick={() => setReplyTo(null)}
-                        >
-                            <ReplyIcon fontSize="small" />
-                        </IconButton>
-                    }
-                >
-                    <Typography variant="body2">
-                        Replying to {replyTo.sender_name}
-                    </Typography>
-                    <Typography variant="caption" sx={{ fontStyle: 'italic' }}>
-                        {replyTo.message.length > 50 
-                            ? `${replyTo.message.substring(0, 50)}...` 
-                            : replyTo.message
-                        }
-                    </Typography>
-                </Alert>
-            )}
-
-            {/* Messages Area */}
-            <Paper
-                sx={{
-                    flex: 1,
-                    overflow: 'hidden',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    border: 1,
-                    borderColor: 'divider'
-                }}
-            >
-                <Box
-                    sx={{
-                        flex: 1,
-                        overflow: 'auto',
-                        p: 2,
-                        backgroundColor: '#f8f9fa',
-                        position: 'relative'
-                    }}
-                >
-                    {isLoading ? (
-                        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-                            <CircularProgress />
-                        </Box>
-                    ) : messages.length === 0 ? (
-                        <Box sx={{ textAlign: 'center', p: 4 }}>
-                            <ChatIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-                            <Typography variant="h6" color="text.secondary">
-                                No messages yet
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">
-                                Start the conversation!
-                            </Typography>
-                        </Box>
-                    ) : (
-                        <List sx={{ p: 0 }}>
-                            {messages.map((message) => (
-                                <ListItem
-                                    key={message.id || `${message.sender_id}-${message.timestamp}`}
-                                    sx={{
-                                        flexDirection: 'column',
-                                        alignItems: 'flex-start',
-                                        mb: 2,
-                                        p: 0,
-                                        position: 'relative'
-                                    }}
-                                >
-                                    <Box
-                                        sx={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            mb: 1,
-                                            width: '100%'
-                                        }}
-                                    >
-                                        <Avatar sx={{ width: 32, height: 32, mr: 1 }}>
-                                            {message.sender_name?.charAt(0)?.toUpperCase()}
-                                        </Avatar>
-                                        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                                            {message.sender_name}
-                                        </Typography>
-                                        {message.sender_id === currentUser?.user_id && (
-                                            <Chip
-                                                label="You"
-                                                size="small"
-                                                sx={{ ml: 1, height: 20 }}
-                                            />
-                                        )}
-                                        <Typography variant="caption" sx={{ ml: 'auto', color: 'text.secondary' }}>
-                                            {formatTimestamp(message.timestamp || message.created_at)}
-                                        </Typography>
-                                        <IconButton
-                                            size="small"
-                                            onClick={(e) => {
-                                                setAnchorEl(e.currentTarget);
-                                                setSelectedMessage(message);
-                                            }}
-                                            sx={{ ml: 1 }}
-                                        >
-                                            <MoreIcon fontSize="small" />
-                                        </IconButton>
-                                    </Box>
-                                    
-                                    <Paper
-                                        sx={{
-                                            p: 2,
-                                            ml: 5,
-                                            backgroundColor: 'white',
-                                            border: 1,
-                                            borderColor: 'divider',
-                                            borderRadius: 2,
-                                            maxWidth: 'calc(100% - 40px)',
-                                            position: 'relative'
-                                        }}
-                                    >
-                                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                                            {message.message}
-                                        </Typography>
-                                    </Paper>
-                                </ListItem>
-                            ))}
-                            <div ref={messagesEndRef} />
-                        </List>
-                    )}
-
-                    {/* Typing Indicator */}
-                    {isOthersTyping && (
-                        <Box
-                            sx={{
-                                position: 'absolute',
-                                bottom: 8,
-                                left: 16,
-                                display: 'flex',
-                                alignItems: 'center',
-                                backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                                px: 2,
-                                py: 1,
-                                borderRadius: 2,
-                                boxShadow: 1
-                            }}
-                        >
-                            <Box sx={{ display: 'flex', mr: 1 }}>
-                                {[0, 1, 2].map((i) => (
-                                    <Box
-                                        key={i}
-                                        sx={{
-                                            width: 4,
-                                            height: 4,
-                                            borderRadius: '50%',
-                                            backgroundColor: 'text.secondary',
-                                            mx: 0.5,
-                                            animation: 'pulse 1.5s infinite',
-                                            animationDelay: `${i * 0.2}s`,
-                                            '@keyframes pulse': {
-                                                '0%, 100%': { opacity: 0.4 },
-                                                '50%': { opacity: 1 }
-                                            }
-                                        }}
-                                    />
-                                ))}
-                            </Box>
-                            <Typography variant="caption" color="text.secondary">
-                                {typingUsers.length === 1 ? 'Someone is typing...' : `${typingUsers.length} people are typing...`}
-                            </Typography>
-                        </Box>
-                    )}
-                </Box>
-
-                {/* Message Input */}
-                {eventStatus !== 'completed' && (
-                    <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider', backgroundColor: 'white' }}>
-                        <Box sx={{ display: 'flex', gap: 1 }}>
-                            <TextField
-                                fullWidth
-                                multiline
-                                maxRows={3}
-                                value={newMessage}
-                                onChange={handleInputChange}
-                                onKeyPress={handleKeyPress}
-                                placeholder={replyTo ? `Reply to ${replyTo.sender_name}...` : "Type your message..."}
-                                disabled={!isConnected}
-                                variant="outlined"
-                                size="small"
-                            />
-                            <Button
-                                variant="contained"
-                                onClick={handleSendMessage}
-                                disabled={!newMessage.trim() || !isConnected}
-                                sx={{ minWidth: 'auto', px: 2 }}
-                            >
-                                <SendIcon />
-                            </Button>
-                        </Box>
-                        <Typography variant="caption" sx={{ color: 'text.secondary', mt: 1, display: 'block' }}>
-                            Press Enter to send, Shift+Enter for new line
-                        </Typography>
-                    </Box>
-                )}
-            </Paper>
-
-            {/* Message Actions Menu */}
-            <Menu
-                anchorEl={anchorEl}
-                open={Boolean(anchorEl)}
-                onClose={() => setAnchorEl(null)}
-            >
-                <MenuItem onClick={() => handleMessageAction(selectedMessage, 'reply')}>
-                    <ReplyIcon sx={{ mr: 1 }} fontSize="small" /> Reply
-                </MenuItem>
-                <MenuItem onClick={() => handleMessageAction(selectedMessage, 'copy')}>
-                    <CopyIcon sx={{ mr: 1 }} fontSize="small" /> Copy
-                </MenuItem>
-                <MenuItem onClick={() => handleMessageAction(selectedMessage, 'pin')}>
-                    <PinIcon sx={{ mr: 1 }} fontSize="small" /> Pin
-                </MenuItem>
-            </Menu>
-        </Box>
+      <div className="flex flex-col items-center justify-center h-full p-4">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-2"></div>
+        <p className="text-sm text-slate-600">Loading chat...</p>
+      </div>
     );
+  }
+
+  if (!eventId) {
+    return (
+      <div className="flex items-center justify-center h-full p-4">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 mx-auto mb-2 text-slate-300" />
+          <p className="text-slate-500">No event selected</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!userId) {
+    return (
+      <div className="flex items-center justify-center h-full p-4">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 mx-auto mb-2 text-slate-300" />
+          <p className="text-slate-500">Authentication required</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (availableChats.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full p-4">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 mx-auto mb-2 text-slate-300" />
+          <p className="text-slate-500">No chat access available for your role</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render until activeChat is set
+  if (!activeChat) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-4">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-2"></div>
+        <p className="text-sm text-slate-600">Setting up chat...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-[600px] bg-white border border-slate-200 rounded-lg overflow-hidden">
+      {/* Chat Type Tabs */}
+      {availableChats.length > 1 && (
+        <div className="flex border-b border-slate-200 bg-slate-50">
+          {availableChats.map((chat) => {
+            const IconComponent = chat.icon;
+            return (
+              <button
+                key={chat.type}
+                onClick={() => setActiveChat(chat.type)}
+                className={`flex items-center px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeChat === chat.type
+                    ? 'border-indigo-500 text-indigo-600 bg-white'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <IconComponent className="w-4 h-4 mr-2" />
+                {chat.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Chat Header */}
+      <div className="flex items-center p-3 border-b border-slate-200 bg-slate-50">
+        <MessageCircle className="w-5 h-5 text-indigo-600 mr-2" />
+        <h3 className="font-semibold text-slate-900">
+          {availableChats.find(chat => chat.type === activeChat)?.label || 'Event Chat'}
+        </h3>
+        <div className="ml-auto">
+          <span className="text-sm text-slate-600">
+            {messages.length} messages
+          </span>
+        </div>
+      </div>
+
+      {/* Event Status Alert */}
+      {eventStatus === 'completed' && (
+        <div className="p-3 bg-amber-50 border-b border-amber-200">
+          <div className="flex items-center">
+            <AlertCircle className="w-4 h-4 text-amber-600 mr-2" />
+            <p className="text-sm text-amber-700">This event has ended. Chat is now view-only.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Connection Error */}
+      {connectionError && (
+        <div className="p-3 bg-red-50 border-b border-red-200">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <AlertCircle className="w-4 h-4 text-red-600 mr-2" />
+              <p className="text-sm text-red-600">{connectionError}</p>
+            </div>
+            <button
+              onClick={handleRetryConnection}
+              className="text-xs text-red-600 hover:text-red-800 flex items-center"
+            >
+              <RefreshCw className="w-3 h-3 mr-1" />
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Error Message */}
+      {error && (
+        <div className="p-3 bg-red-50 border-b border-red-200">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-red-600">{error}</p>
+            <button
+              onClick={() => setError(null)}
+              className="text-xs text-red-600 hover:text-red-800"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
+        {messages.length === 0 ? (
+          <div className="text-center text-slate-500 py-8">
+            <MessageCircle className="w-12 h-12 mx-auto mb-2 text-slate-300" />
+            <p className="text-sm">No messages yet.</p>
+            <p className="text-xs text-slate-400 mt-1">Start the conversation!</p>
+          </div>
+        ) : (
+          messages.map((message, index) => {
+            const messageKey = message.id || `${message.sender_id}-${message.timestamp || message.created_at}-${index}`;
+            return (
+              <div
+                key={messageKey}
+                className={`flex ${isOwnMessage(message) ? 'justify-end' : 'justify-start'}`}
+              >
+                <div
+                  className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                    isOwnMessage(message)
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-100 text-slate-900'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium opacity-75">
+                      {message.sender_name || message.user_name || 'Unknown'}
+                    </span>
+                    <span className="text-xs opacity-75">
+                      {formatTime(message.timestamp || message.created_at)}
+                    </span>
+                  </div>
+                  <p className="text-sm break-words">{message.message}</p>
+                </div>
+              </div>
+            );
+          })
+        )}
+        
+        {typingUsers.length > 0 && (
+          <div className="flex justify-start">
+            <div className="bg-slate-100 text-slate-900 px-4 py-2 rounded-lg">
+              <div className="flex items-center space-x-1">
+                <div className="flex space-x-1">
+                  <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                  <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                </div>
+                <span className="text-xs text-slate-600 ml-2">
+                  {typingUsers.length === 1 ? 'Someone is typing...' : `${typingUsers.length} people are typing...`}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Message Input */}
+      {eventStatus !== 'completed' && (
+        <div className="p-3 border-t border-slate-200">
+          <div className="flex items-center space-x-2">
+            <input
+              type="text"
+              value={newMessage}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder={isConnected ? "Type your message..." : "Connecting..."}
+              className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-slate-50"
+              disabled={!isConnected || isSending}
+              maxLength={1000}
+            />
+            <button
+              onClick={sendMessage}
+              disabled={!newMessage.trim() || !isConnected || isSending}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-w-[44px] flex items-center justify-center"
+              title={!isConnected ? "Not connected" : isSending ? "Sending..." : "Send message"}
+            >
+              {isSending ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
+            </button>
+          </div>
+          <div className="flex items-center justify-between mt-1">
+            <p className="text-xs text-slate-500">
+              Press Enter to send • {messages.length} messages
+            </p>
+            <p className="text-xs text-slate-400">
+              {newMessage.length}/1000
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default EventChat;

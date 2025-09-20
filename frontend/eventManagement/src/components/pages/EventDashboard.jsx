@@ -226,7 +226,7 @@ const EventDashboard = () => {
                             }
                         }}
                     >
-                        Back to Club
+                        Back
                     </Button>
                 </Container>
             </Box>

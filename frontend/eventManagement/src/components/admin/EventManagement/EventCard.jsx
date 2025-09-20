@@ -216,17 +216,7 @@ const EventCard = ({ event, onViewDetails, onApprove, onReject, userRole = 'admi
           </div>
         </div>
 
-        {/* Connection Status Indicator */}
-        {userRole === 'admin' && (
-          <div className="mb-4 p-2 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-center text-sm">
-              <div className={`w-2 h-2 rounded-full mr-2 ${socket?.connected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-              <span className="text-blue-700">
-                Socket: {socket?.connected ? 'Connected' : 'Disconnected'}
-              </span>
-            </div>
-          </div>
-        )}
+
 
         {/* Confirmation Modal */}
         {showConfirmation && (

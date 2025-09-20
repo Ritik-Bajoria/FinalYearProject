@@ -26,10 +26,9 @@ const useEventSocket = (eventId, chatType, userId) => {
             }
 
             const userRole = localStorage.getItem('userRole');
-            // console.log('Loading messages from endpoint:', `${API_BASE_URL}/api/admin/events/${eventId}/${chatType}/messages`);
-            console.log("this is my user",userRole)
+            console.log("🔍 User role for API call:", userRole)
             const endpoint = userRole === 'admin' 
-                ? `${API_BASE_URL}/api/admin/events/${eventId}/${chatType}/messages`
+                ? `${API_BASE_URL}/api/admin/events/${eventId}/chat?chat_type=${chatType}`
                 : `${API_BASE_URL}/api/events/${eventId}/chats/${chatType}/messages`;
             
             // console.log('Making request to:', endpoint);
@@ -48,32 +47,49 @@ const useEventSocket = (eventId, chatType, userId) => {
             }
             
             const mainResponse = await response.json();
-            const data = mainResponse.data;
-            // console.log('API response:', data);
+            console.log('📨 Chat API response:', mainResponse);
             
-            // Extract messages from the response structure
+            // Handle different response formats from admin vs regular endpoints
             let messagesData = [];
             
-            if (data.messages && Array.isArray(data.messages)) {
-                messagesData = data.messages;
-            } 
-            else if (Array.isArray(data)) {
-                messagesData = data; // If response is directly an array
-            }
-            else if (data.data && Array.isArray(data.data)) {
-                messagesData = data.data;
-            }
-            else if (data.success && data.messages && Array.isArray(data.messages)) {
-                messagesData = data.messages;
+            if (userRole === 'admin') {
+                // Admin endpoint returns messages directly in data field
+                if (mainResponse.data && Array.isArray(mainResponse.data)) {
+                    messagesData = mainResponse.data;
+                }
+            } else {
+                // Regular user endpoint returns messages in data.messages
+                if (mainResponse.data && mainResponse.data.messages && Array.isArray(mainResponse.data.messages)) {
+                    messagesData = mainResponse.data.messages;
+                } else if (mainResponse.messages && Array.isArray(mainResponse.messages)) {
+                    messagesData = mainResponse.messages;
+                }
             }
             
-            // console.log('Extracted messages:', messagesData);
+            // Fallback for any other format
+            if (messagesData.length === 0) {
+                if (Array.isArray(mainResponse)) {
+                    messagesData = mainResponse;
+                } else if (Array.isArray(mainResponse.data)) {
+                    messagesData = mainResponse.data;
+                }
+            }
+            
+            console.log('📋 Extracted messages:', messagesData);
             
             if (Array.isArray(messagesData)) {
+                // Sort messages by timestamp (ascending order for chat display)
+                const sortedMessages = messagesData.sort((a, b) => {
+                    const timeA = new Date(a.timestamp || a.created_at);
+                    const timeB = new Date(b.timestamp || b.created_at);
+                    return timeA - timeB;
+                });
+                
                 // REPLACE the messages, don't append
-                setMessages(messagesData);
+                setMessages(sortedMessages);
+                console.log('✅ Messages loaded successfully:', sortedMessages.length, 'messages');
             } else {
-                console.error('Messages data is not an array:', messagesData);
+                console.error('❌ Messages data is not an array:', messagesData);
                 setMessages([]);
             }
             
@@ -108,13 +124,38 @@ const useEventSocket = (eventId, chatType, userId) => {
             console.log('✅ Event socket connected');
             setIsConnected(true);
             setConnectionError(null);
-            newSocket.emit('authenticate', { token });
             
-            // Join event chat room after connection
+            // For admin users, use admin_authenticate
+            const userRole = localStorage.getItem('userRole');
+            console.log('🔐 Authenticating as:', userRole);
+            if (userRole === 'admin') {
+                newSocket.emit('admin_authenticate', { token });
+            } else {
+                newSocket.emit('authenticate', { token });
+            }
+        });
+
+        newSocket.on('authenticated', (data) => {
+            console.log('✅ Socket authenticated:', data);
+            // Join event chat room after authentication
             newSocket.emit('join_event_chat', { 
                 event_id: eventId,
                 chat_type: chatType 
             });
+        });
+
+        newSocket.on('admin_authenticated', (data) => {
+            console.log('✅ Admin socket authenticated:', data);
+            // Join event chat room after authentication
+            newSocket.emit('join_event_chat', { 
+                event_id: eventId,
+                chat_type: chatType 
+            });
+        });
+
+        newSocket.on('auth_error', (error) => {
+            console.error('❌ Authentication error:', error);
+            setConnectionError('Not authenticated');
         });
 
         newSocket.on('joined_chat', (data) => {
@@ -122,6 +163,14 @@ const useEventSocket = (eventId, chatType, userId) => {
             // Load initial messages after joining the chat
             loadInitialMessages();
         });
+
+        // Fallback: Load messages even if socket events don't work
+        setTimeout(() => {
+            if (messages.length === 0) {
+                console.log('🔄 Loading messages as fallback...');
+                loadInitialMessages();
+            }
+        }, 2000);
 
         newSocket.on('disconnect', () => {
             console.log('❌ Event socket disconnected');
@@ -219,6 +268,13 @@ const useEventSocket = (eventId, chatType, userId) => {
             };
         }
     }, [connectSocket, eventId, chatType]);
+
+    // Load messages when chat type changes
+    useEffect(() => {
+        if (eventId && chatType) {
+            loadInitialMessages();
+        }
+    }, [eventId, chatType, loadInitialMessages]);
 
     // console.log('Current messages:', messages);
     

@@ -679,8 +679,7 @@ def create_volunteer_posting(current_user, event_id):
             title=data.get('title'),
             description=data.get('description'),
             requirements=data.get('requirements'),
-            positions_available=data.get('positions_available'),
-            created_by=current_user_id
+            positions_available=data.get('positions_available')
         )
         
         db.session.add(posting)

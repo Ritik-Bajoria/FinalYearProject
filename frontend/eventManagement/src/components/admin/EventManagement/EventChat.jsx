@@ -3,8 +3,11 @@ import { Send, MessageCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import useEventSocket from '../../hooks/useEventSocket';
 import useAuthUser from '../../hooks/useAuthUser';
 
-const EventChat = ({ eventId }) => {
-  const { user, student, faculty, admin, userRole } = useAuthUser();
+const EventChat = ({ eventId, userRole, currentUser, showNotification }) => {
+  const { user, student, faculty, admin, userRole: authUserRole } = useAuthUser();
+  
+  // Use passed userRole or fallback to auth user role
+  const effectiveUserRole = userRole || authUserRole;
   const [newMessage, setNewMessage] = useState('');
   const [typingTimeout, setTypingTimeout] = useState(null);
   const messagesEndRef = useRef(null);
@@ -14,6 +17,11 @@ const EventChat = ({ eventId }) => {
 
   // Get the correct user ID based on user type
   const getUserId = () => {
+    // Use passed currentUser first
+    if (currentUser?.user_id) return currentUser.user_id;
+    if (currentUser?.id) return currentUser.id;
+    
+    // Fallback to auth user data
     if (user?.user_id) return user.user_id;
     if (user?.id) return user.id;
     if (student?.user_id) return student.user_id;
@@ -26,6 +34,15 @@ const EventChat = ({ eventId }) => {
   };
 
   const userId = getUserId();
+  
+
+
+  // Ensure userRole is set for admin panel
+  useEffect(() => {
+    if (!localStorage.getItem('userRole') && userRole === 'admin') {
+      localStorage.setItem('userRole', 'admin');
+    }
+  }, [userRole]);
 
   // Use the event socket hook
   const {
@@ -55,7 +72,6 @@ const EventChat = ({ eventId }) => {
     const messageText = newMessage.trim();
     
     if (!messageText) {
-      console.log('❌ Cannot send empty message');
       return;
     }
     
@@ -65,7 +81,6 @@ const EventChat = ({ eventId }) => {
     }
     
     if (isSending) {
-      console.log('❌ Already sending a message');
       return;
     }
 
@@ -73,19 +88,15 @@ const EventChat = ({ eventId }) => {
     setError(null);
 
     try {
-      console.log('📤 Sending message:', messageText);
-      
       // Send just the message text - the socket hook will handle the payload structure
       await sendRealTimeMessage({
         message: messageText
       });
       
-      console.log('✅ Message sent successfully');
       setNewMessage('');
       handleTyping(false);
       
     } catch (err) {
-      console.error('❌ Failed to send message:', err);
       setError(err.message || 'Failed to send message');
     } finally {
       setIsSending(false);
@@ -113,7 +124,7 @@ const EventChat = ({ eventId }) => {
         setTypingTimeout(timeout);
       }
     } catch (err) {
-      console.error('❌ Failed to send typing status:', err);
+      // Silently handle typing status errors
     }
   };
 
@@ -133,7 +144,7 @@ const EventChat = ({ eventId }) => {
     }
   };
 
-  const handleKeyPress = (e) => {
+  const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
@@ -148,7 +159,6 @@ const EventChat = ({ eventId }) => {
         minute: '2-digit'
       });
     } catch (err) {
-      console.error('❌ Error formatting time:', err);
       return '';
     }
   };
@@ -188,6 +198,19 @@ const EventChat = ({ eventId }) => {
         <div className="text-center">
           <AlertCircle className="w-12 h-12 mx-auto mb-2 text-slate-300" />
           <p className="text-slate-500">No event selected</p>
+
+        </div>
+      </div>
+    );
+  }
+
+  if (!userId) {
+    return (
+      <div className="flex items-center justify-center h-full p-4">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 mx-auto mb-2 text-slate-300" />
+          <p className="text-slate-500">Authentication required</p>
+
         </div>
       </div>
     );
@@ -199,10 +222,9 @@ const EventChat = ({ eventId }) => {
       <div className="flex items-center p-3 border-b border-slate-200 bg-slate-50">
         <MessageCircle className="w-5 h-5 text-indigo-600 mr-2" />
         <h3 className="font-semibold text-slate-900">Event Organizer Chat</h3>
-        <div className="ml-auto flex items-center space-x-2">
-          <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+        <div className="ml-auto">
           <span className="text-sm text-slate-600">
-            {isConnected ? 'Connected' : 'Disconnected'}
+            {messages.length} messages
           </span>
         </div>
       </div>
@@ -243,6 +265,8 @@ const EventChat = ({ eventId }) => {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
+
+        
         {messages.length === 0 ? (
           <div className="text-center text-slate-500 py-8">
             <MessageCircle className="w-12 h-12 mx-auto mb-2 text-slate-300" />
@@ -306,7 +330,7 @@ const EventChat = ({ eventId }) => {
             type="text"
             value={newMessage}
             onChange={handleInputChange}
-            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyDown}
             placeholder={isConnected ? "Type your message..." : "Connecting..."}
             className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-slate-50"
             disabled={!isConnected || isSending}

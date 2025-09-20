@@ -38,11 +38,16 @@ const EventManagement = () => {
       }).toString();
 
       const data = await apiCall(`/admin/events?${queryParams}`);
-      setEvents(data.data.events || []);
+      // Handle different response structures
+      const events = data.events || data.data?.events || [];
+      const total = data.total || data.data?.total || 0;
+      const pages = data.pages || data.data?.pages || 1;
+      const currentPage = data.current_page || data.data?.current_page || filtersToUse.page;
+      setEvents(events);
       setPagination({
-        total: data.data.total,
-        pages: data.data.pages,
-        currentPage: data.data.currentPage
+        total,
+        pages,
+        currentPage
       });
     } catch (err) {
       console.error('Failed to fetch events:', err);
@@ -75,11 +80,21 @@ useEffect(() => {
     try {
       await apiCall(`/admin/events/${eventId}/approval-status`, {
         method: 'PATCH',
-        body: JSON.stringify({ approval_status: approvalStatus })
+        body: { approval_status: approvalStatus }
       });
-      fetchEvents(filters); // refresh events
+      // Update the event in the local state immediately for better UX
+      setEvents(prevEvents => 
+        prevEvents.map(event => 
+          event.event_id === eventId 
+            ? { ...event, approval_status: approvalStatus }
+            : event
+        )
+      );
+      // Also refresh from server
+      fetchEvents(filters);
     } catch (err) {
       console.error('Failed to update event status:', err);
+      // Optionally show error notification
     }
   };
 
@@ -106,17 +121,32 @@ useEffect(() => {
       />
 
       {/* Events Grid */}
-      <div className="grid md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-        {events.map(event => (
-          <EventCard 
-            key={event.event_id}
-            event={event}
-            onViewDetails={handleViewDetails}
-            onApprove={() => updateEventStatus(event.event_id, 'approved')}
-            onReject={() => updateEventStatus(event.event_id, 'rejected')}
-          />
-        ))}
-      </div>
+      {loading ? (
+        <div className="grid md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 animate-pulse">
+              <div className="h-36 bg-slate-200 rounded-lg mb-4"></div>
+              <div className="space-y-3">
+                <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+                <div className="h-3 bg-slate-200 rounded w-2/3"></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+          {events.map(event => (
+            <EventCard 
+              key={event.event_id}
+              event={event}
+              onViewDetails={handleViewDetails}
+              onApprove={() => updateEventStatus(event.event_id, 'approved')}
+              onReject={() => updateEventStatus(event.event_id, 'rejected')}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Empty State */}
       {events.length === 0 && !loading && (
@@ -143,25 +173,25 @@ useEffect(() => {
 
       {/* Pagination */}
       {pagination.pages > 1 && (
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mt-6 p-4 bg-white rounded-lg border border-slate-200">
           <div className="text-sm text-slate-600">
-            Showing {((pagination.currentPage - 1) * filters.limit) + 1} to {Math.min(pagination.currentPage * filters.limit, pagination.total)} of {pagination.total} events
+            Showing {((filters.page - 1) * filters.limit) + 1} to {Math.min(filters.page * filters.limit, pagination.total)} of {pagination.total} events
           </div>
           <div className="flex items-center space-x-2">
             <button
-              onClick={() => setFilters(prev => ({ ...prev, page: prev.page - 1 }))}
-              disabled={pagination.currentPage === 1}
-              className="px-3 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => setFilters(prev => ({ ...prev, page: Math.max(1, prev.page - 1) }))}
+              disabled={filters.page === 1}
+              className="px-3 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               Previous
             </button>
-            <span className="px-3 py-2 text-sm text-slate-600">
-              Page {pagination.currentPage} of {pagination.pages}
+            <span className="px-3 py-2 text-sm text-slate-600 bg-slate-50 rounded-lg">
+              Page {filters.page} of {pagination.pages}
             </span>
             <button
-              onClick={() => setFilters(prev => ({ ...prev, page: prev.page + 1 }))}
-              disabled={pagination.currentPage === pagination.pages}
-              className="px-3 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => setFilters(prev => ({ ...prev, page: Math.min(pagination.pages, prev.page + 1) }))}
+              disabled={filters.page >= pagination.pages}
+              className="px-3 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               Next
             </button>

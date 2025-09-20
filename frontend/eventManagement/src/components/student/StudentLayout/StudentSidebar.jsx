@@ -25,7 +25,7 @@ const StudentSidebar = ({ activeTab, setActiveTab, user }) => {
   const menuItems = [
     {
       id: 'social',
-      label: 'Social Events',
+      label: 'Social',
       icon: <HomeIcon />,
       description: 'Discover events'
     },
