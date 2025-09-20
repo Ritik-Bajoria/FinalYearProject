@@ -129,15 +129,15 @@ const EventDashboard = () => {
         switch(activeTab) {
             case 'admin-chat':
             case 'approval':
-                return <EventAdminDashboard eventId={eventId} activeTab={activeTab} />;
+                return <EventAdminDashboard eventId={eventId} activeTab={activeTab} showNotification={showNotification} />;
             case 'registrations':
             case 'attendance':
             case 'budget':
             case 'volunteers':
-                return <EventOrganizerDashboard eventId={eventId} activeTab={activeTab} />;
+                return <EventOrganizerDashboard eventId={eventId} activeTab={activeTab} showNotification={showNotification} />;
             case 'feedback':
             case 'qr':
-                return <EventAttendeeDashboard eventId={eventId} activeTab={activeTab} />;
+                return <EventAttendeeDashboard eventId={eventId} activeTab={activeTab} showNotification={showNotification} />;
             default:
                 return null;
         }

@@ -4,7 +4,8 @@ import {
   TableRow, TableCell, Paper, Button,
   CircularProgress, Alert, Chip, TextField, Stack,
   Dialog, DialogTitle, DialogContent, DialogActions,
-  Tooltip, IconButton, Avatar, TableContainer
+  Tooltip, IconButton, Avatar, TableContainer, Snackbar,
+  Checkbox
 } from '@mui/material';
 import {
   People, CheckCircle, EventAvailable, Search,
@@ -18,6 +19,18 @@ const EventAttendance = ({ eventId, showNotification }) => {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
+  const [selectedAttendees, setSelectedAttendees] = useState([]);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+
+  // Internal notification handler if showNotification prop is not provided
+  const handleNotification = (message, severity = 'info') => {
+    if (typeof showNotification === 'function') {
+      showNotification(message, severity);
+    } else {
+      setSnackbar({ open: true, message, severity });
+    }
+  };
 
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:7000/api';
@@ -63,7 +76,7 @@ const EventAttendance = ({ eventId, showNotification }) => {
       setAttendance(attendanceData);
     } catch (err) {
       setError(err.message || 'Failed to fetch attendance');
-      showNotification(err.message || 'Failed to fetch attendance', 'error');
+      handleNotification(err.message || 'Failed to fetch attendance', 'error');
     } finally {
       setLoading(false);
     }
@@ -84,46 +97,120 @@ const EventAttendance = ({ eventId, showNotification }) => {
         await apiCall(`/events/${eventId}/attendance/${userId}`, {
           method: 'DELETE'
         });
-        showNotification('Attendance unmarked successfully', 'success');
+        handleNotification('Attendance unmarked successfully', 'success');
       } else {
         // Mark attendance
         await apiCall(`/events/${eventId}/attendance`, {
           method: 'POST',
           body: { user_id: userId }
         });
-        showNotification('Attendance marked successfully', 'success');
+        handleNotification('Attendance marked successfully', 'success');
       }
       
       fetchAttendance();
     } catch (err) {
-      showNotification(err.message || 'Failed to update attendance', 'error');
+      handleNotification(err.message || 'Failed to update attendance', 'error');
     }
   };
 
-  const handleBulkCheckIn = () => {
-    if (showNotification) {
-      showNotification('Bulk check-in functionality coming soon', 'info');
-    } else {
-      alert('Bulk check-in functionality coming soon');
+  const handleBulkMarkPresent = async () => {
+    if (selectedAttendees.length === 0) {
+      handleNotification('Please select attendees to mark as present', 'warning');
+      return;
     }
+
+    setBulkActionLoading(true);
+    try {
+      const promises = selectedAttendees
+        .filter(userId => {
+          const attendee = attendance.find(a => a.user_id === userId);
+          return attendee && !attendee.attended;
+        })
+        .map(userId => 
+          apiCall(`/events/${eventId}/attendance`, {
+            method: 'POST',
+            body: { user_id: userId }
+          })
+        );
+
+      await Promise.all(promises);
+      handleNotification(`Marked ${promises.length} attendees as present`, 'success');
+      setSelectedAttendees([]);
+      fetchAttendance();
+    } catch (err) {
+      handleNotification(err.message || 'Failed to mark attendees as present', 'error');
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const handleBulkMarkAbsent = async () => {
+    if (selectedAttendees.length === 0) {
+      handleNotification('Please select attendees to mark as absent', 'warning');
+      return;
+    }
+
+    setBulkActionLoading(true);
+    try {
+      const promises = selectedAttendees
+        .filter(userId => {
+          const attendee = attendance.find(a => a.user_id === userId);
+          return attendee && attendee.attended;
+        })
+        .map(userId => 
+          apiCall(`/events/${eventId}/attendance/${userId}`, {
+            method: 'DELETE'
+          })
+        );
+
+      await Promise.all(promises);
+      handleNotification(`Marked ${promises.length} attendees as absent`, 'success');
+      setSelectedAttendees([]);
+      fetchAttendance();
+    } catch (err) {
+      handleNotification(err.message || 'Failed to mark attendees as absent', 'error');
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const handleSelectAll = () => {
+    if (selectedAttendees.length === filteredAttendance.length) {
+      setSelectedAttendees([]);
+    } else {
+      setSelectedAttendees(filteredAttendance.map(a => a.user_id));
+    }
+  };
+
+  const handleSelectAttendee = (userId) => {
+    setSelectedAttendees(prev => 
+      prev.includes(userId) 
+        ? prev.filter(id => id !== userId)
+        : [...prev, userId]
+    );
   };
 
   const handleExportAttendance = () => {
+    if (attendance.length === 0) {
+      handleNotification('No attendance data to export', 'warning');
+      return;
+    }
+
     const csvContent = "data:text/csv;charset=utf-8," + 
-      "Name,Email,Status,Check-in Time\n" +
+      "Name,Email,Status,Check-in Time,QR Check-in\n" +
       attendance.map(a => 
-        `${a.user.full_name},${a.user.email},${a.status},${a.check_in_time || 'N/A'}`
+        `"${a.user.full_name || 'Unknown'}","${a.user.email || 'N/A'}","${a.attended ? 'Present' : 'Absent'}","${a.check_in_time ? new Date(a.check_in_time).toLocaleString() : 'N/A'}","${a.qr_checked_in ? 'Yes' : 'No'}"`
       ).join("\n");
     
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `event_${eventId}_attendance.csv`);
+    link.setAttribute("download", `event_${eventId}_attendance_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     
-    showNotification('Attendance exported successfully', 'success');
+    handleNotification('Attendance exported successfully', 'success');
   };
 
   const filteredAttendance = attendance.filter(attendee => {
@@ -146,16 +233,61 @@ const EventAttendance = ({ eventId, showNotification }) => {
           Event Attendance
         </Typography>
         <Stack direction="row" spacing={1}>
-
           <Button
             variant="outlined"
             startIcon={<Download />}
             onClick={handleExportAttendance}
+            disabled={attendance.length === 0}
           >
             Export
           </Button>
         </Stack>
       </Box>
+
+      {/* Attendance Summary */}
+      {attendance.length > 0 && (
+        <Box mb={3}>
+          <Paper sx={{ p: 2, backgroundColor: '#f5f5f5' }}>
+            <Typography variant="h6" gutterBottom>
+              Attendance Summary
+            </Typography>
+            <Stack direction="row" spacing={4}>
+              <Box textAlign="center">
+                <Typography variant="h4" color="success.main" fontWeight="bold">
+                  {presentCount}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Present
+                </Typography>
+              </Box>
+              <Box textAlign="center">
+                <Typography variant="h4" color="error.main" fontWeight="bold">
+                  {absentCount}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Absent
+                </Typography>
+              </Box>
+              <Box textAlign="center">
+                <Typography variant="h4" color="primary.main" fontWeight="bold">
+                  {attendance.length}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Total Registered
+                </Typography>
+              </Box>
+              <Box textAlign="center">
+                <Typography variant="h4" color="info.main" fontWeight="bold">
+                  {attendance.length > 0 ? Math.round((presentCount / attendance.length) * 100) : 0}%
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Attendance Rate
+                </Typography>
+              </Box>
+            </Stack>
+          </Paper>
+        </Box>
+      )}
 
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Box display="flex" alignItems="center" gap={2}>
@@ -187,6 +319,35 @@ const EventAttendance = ({ eventId, showNotification }) => {
             Absent ({absentCount})
           </Button>
         </Box>
+        
+        {/* Bulk Actions */}
+        {selectedAttendees.length > 0 && (
+          <Stack direction="row" spacing={1}>
+            <Typography variant="body2" sx={{ alignSelf: 'center' }}>
+              {selectedAttendees.length} selected
+            </Typography>
+            <Button
+              size="small"
+              variant="contained"
+              color="success"
+              startIcon={<PersonAdd />}
+              onClick={handleBulkMarkPresent}
+              disabled={bulkActionLoading}
+            >
+              Mark Present
+            </Button>
+            <Button
+              size="small"
+              variant="contained"
+              color="error"
+              startIcon={<PersonRemove />}
+              onClick={handleBulkMarkAbsent}
+              disabled={bulkActionLoading}
+            >
+              Mark Absent
+            </Button>
+          </Stack>
+        )}
         {/* <Button
           variant="contained"
           color="primary"
@@ -220,16 +381,30 @@ const EventAttendance = ({ eventId, showNotification }) => {
           <Table>
             <TableHead>
               <TableRow>
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    indeterminate={selectedAttendees.length > 0 && selectedAttendees.length < filteredAttendance.length}
+                    checked={filteredAttendance.length > 0 && selectedAttendees.length === filteredAttendance.length}
+                    onChange={handleSelectAll}
+                  />
+                </TableCell>
                 <TableCell>Attendee</TableCell>
                 <TableCell>Email</TableCell>
                 <TableCell align="center">Status</TableCell>
                 <TableCell>Check-in Time</TableCell>
+                <TableCell align="center">Check-in Method</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {filteredAttendance.map((attendee) => (
                 <TableRow key={attendee.user_id} hover>
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      checked={selectedAttendees.includes(attendee.user_id)}
+                      onChange={() => handleSelectAttendee(attendee.user_id)}
+                    />
+                  </TableCell>
                   <TableCell>
                     <Box display="flex" alignItems="center" gap={2}>
                       <Avatar>
@@ -252,6 +427,20 @@ const EventAttendance = ({ eventId, showNotification }) => {
                       ? new Date(attendee.check_in_time).toLocaleString() 
                       : 'Not checked in'}
                   </TableCell>
+                  <TableCell align="center">
+                    {attendee.attended ? (
+                      <Chip
+                        label={attendee.qr_checked_in ? 'QR Code' : 'Manual'}
+                        size="small"
+                        color={attendee.qr_checked_in ? 'primary' : 'default'}
+                        variant="outlined"
+                      />
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        -
+                      </Typography>
+                    )}
+                  </TableCell>
                   <TableCell align="right">
                     <Tooltip title={attendee.attended ? 'Mark as absent' : 'Mark as present'}>
                       <IconButton
@@ -270,7 +459,21 @@ const EventAttendance = ({ eventId, showNotification }) => {
         </TableContainer>
       )}
 
-
+      {/* Internal Snackbar for notifications when showNotification prop is not provided */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert 
+          onClose={() => setSnackbar({ ...snackbar, open: false })} 
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Paper>
   );
 };

@@ -28,11 +28,21 @@ const EventRegistrations = ({ eventId, showNotification }) => {
   const [editingRegistration, setEditingRegistration] = useState(null);
   const [selectedStatus, setSelectedStatus] = useState('');
   const [openStatusDialog, setOpenStatusDialog] = useState(false);
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
   const [pagination, setPagination] = useState({
     page: 1,
     perPage: 10,
     total: 0
   });
+
+  // Internal notification handler if showNotification prop is not provided
+  const handleNotification = (message, severity = 'info') => {
+    if (typeof showNotification === 'function') {
+      showNotification(message, severity);
+    } else {
+      setSnackbar({ open: true, message, severity });
+    }
+  };
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:7000/api';
 
@@ -103,7 +113,7 @@ const EventRegistrations = ({ eventId, showNotification }) => {
       }));
     } catch (err) {
       setError(err.message || 'Failed to fetch registrations');
-      showNotification(err.message || 'Failed to fetch registrations', 'error');
+      handleNotification(err.message || 'Failed to fetch registrations', 'error');
     } finally {
       setLoading(false);
     }
@@ -125,12 +135,12 @@ const EventRegistrations = ({ eventId, showNotification }) => {
         }
       );
       
-      showNotification('Registration status updated successfully', 'success');
+      handleNotification('Registration status updated successfully', 'success');
       setOpenStatusDialog(false);
       setEditingRegistration(null);
       fetchRegistrations();
     } catch (err) {
-      showNotification(err.message || 'Failed to update registration', 'error');
+      handleNotification(err.message || 'Failed to update registration', 'error');
     }
   };
 
@@ -358,6 +368,22 @@ const EventRegistrations = ({ eventId, showNotification }) => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Internal Snackbar for notifications when showNotification prop is not provided */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert 
+          onClose={() => setSnackbar({ ...snackbar, open: false })} 
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Card>
   );
 };

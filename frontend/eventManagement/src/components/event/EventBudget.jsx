@@ -1,16 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
-  Grid, // Added Grid import
+  Grid,
   Card,
   CardContent,
   Typography,
   Button,
   TextField,
-  MenuItem,
-  Select,
-  FormControl,
-  InputLabel,
   Table,
   TableBody,
   TableCell,
@@ -25,7 +21,9 @@ import {
   DialogActions,
   Alert,
   CircularProgress,
-  Chip
+  Chip,
+  Snackbar,
+  LinearProgress
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -34,19 +32,43 @@ import {
   AttachMoney,
   TrendingUp,
   TrendingDown,
-  Close as CloseIcon
+  Close as CloseIcon,
+  Receipt as ReceiptIcon,
+  AccountBalance as BudgetIcon
 } from '@mui/icons-material';
 
 const EventBudget = ({ eventId, showNotification }) => {
-  const [budgetItems, setBudgetItems] = useState([]);
+  const [budgetData, setBudgetData] = useState({
+    budget_id: null,
+    allocated_amount: 0,
+    total_spent: 0,
+    remaining_budget: 0,
+    budget_status: 'not_set',
+    expenses: []
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [budgetDialogOpen, setBudgetDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [formData, setFormData] = useState({
     description: '',
-    amount: ''
+    amount: '',
+    receipt: null
   });
+  const [budgetFormData, setBudgetFormData] = useState({
+    allocated_amount: ''
+  });
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
+
+  // Internal notification handler if showNotification prop is not provided
+  const handleNotification = (message, severity = 'info') => {
+    if (typeof showNotification === 'function') {
+      showNotification(message, severity);
+    } else {
+      setSnackbar({ open: true, message, severity });
+    }
+  };
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:7000/api';
 
@@ -93,20 +115,18 @@ const EventBudget = ({ eventId, showNotification }) => {
     }
   }, [API_BASE_URL]);
 
-  const fetchBudgetItems = async () => {
+  const fetchBudgetData = async () => {
     setLoading(true);
     setError(null);
     try {
       const response = await apiCall(`/events/${eventId}/budget`);
-      // Handle the budget response structure
-      if (response.expenses) {
-        setBudgetItems(response.expenses);
-      } else {
-        setBudgetItems([]);
-      }
+      setBudgetData(response);
+      setBudgetFormData({
+        allocated_amount: response.allocated_amount || ''
+      });
     } catch (err) {
-      setError(err.message || 'Failed to fetch budget items');
-      showNotification(err.message || 'Failed to fetch budget items', 'error');
+      setError(err.message || 'Failed to fetch budget data');
+      handleNotification(err.message || 'Failed to fetch budget data', 'error');
     } finally {
       setLoading(false);
     }
@@ -114,52 +134,80 @@ const EventBudget = ({ eventId, showNotification }) => {
 
   useEffect(() => {
     if (eventId) {
-      fetchBudgetItems();
+      fetchBudgetData();
     }
   }, [eventId]);
 
-  const handleSubmit = async (e) => {
+  const handleExpenseSubmit = async (e) => {
     e.preventDefault();
     try {
       if (editingItem) {
-        // Update existing item
+        // Update existing expense
         await apiCall(`/events/${eventId}/budget/expenses/${editingItem.expense_id}`, {
           method: 'PUT',
-          body: formData
+          body: {
+            description: formData.description,
+            amount: formData.amount
+          }
         });
-        showNotification('Budget item updated successfully', 'success');
+        handleNotification('Expense updated successfully', 'success');
       } else {
-        // Create new item
+        // Create new expense with FormData for file upload
+        const formDataToSend = new FormData();
+        formDataToSend.append('description', formData.description);
+        formDataToSend.append('amount', formData.amount);
+        if (formData.receipt) {
+          formDataToSend.append('receipt', formData.receipt);
+        }
+
         await apiCall(`/events/${eventId}/budget/expenses`, {
           method: 'POST',
-          body: formData
+          body: formDataToSend
         });
-        showNotification('Budget item added successfully', 'success');
+        handleNotification('Expense added successfully', 'success');
       }
       
       setDialogOpen(false);
       setEditingItem(null);
       setFormData({
         description: '',
-        amount: ''
+        amount: '',
+        receipt: null
       });
-      fetchBudgetItems();
+      fetchBudgetData();
     } catch (err) {
-      showNotification(err.message || 'Failed to save budget item', 'error');
+      handleNotification(err.message || 'Failed to save expense', 'error');
+    }
+  };
+
+  const handleBudgetSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await apiCall(`/events/${eventId}/budget`, {
+        method: 'PUT',
+        body: {
+          allocated_amount: budgetFormData.allocated_amount
+        }
+      });
+      handleNotification('Budget allocation updated successfully', 'success');
+      setBudgetDialogOpen(false);
+      fetchBudgetData();
+    } catch (err) {
+      handleNotification(err.message || 'Failed to update budget allocation', 'error');
     }
   };
 
   const handleDelete = async (expenseId) => {
-    if (!window.confirm('Are you sure you want to delete this budget item?')) return;
+    if (!window.confirm('Are you sure you want to delete this expense?')) return;
     
     try {
       await apiCall(`/events/${eventId}/budget/expenses/${expenseId}`, {
         method: 'DELETE'
       });
-      showNotification('Budget item deleted successfully', 'success');
-      fetchBudgetItems();
+      handleNotification('Expense deleted successfully', 'success');
+      fetchBudgetData();
     } catch (err) {
-      showNotification(err.message || 'Failed to delete budget item', 'error');
+      handleNotification(err.message || 'Failed to delete expense', 'error');
     }
   };
 
@@ -168,52 +216,74 @@ const EventBudget = ({ eventId, showNotification }) => {
       setEditingItem(item);
       setFormData({
         description: item.description,
-        amount: item.amount
+        amount: item.amount,
+        receipt: null
       });
     } else {
       setEditingItem(null);
       setFormData({
         description: '',
-        amount: ''
+        amount: '',
+        receipt: null
       });
     }
     setDialogOpen(true);
   };
 
-  const calculateTotals = () => {
-    const totalSpent = budgetItems.reduce((sum, item) => sum + parseFloat(item.amount || 0), 0);
-    return {
-      totalSpent,
-      itemCount: budgetItems.length
-    };
+  const openBudgetDialog = () => {
+    setBudgetFormData({
+      allocated_amount: budgetData.allocated_amount || ''
+    });
+    setBudgetDialogOpen(true);
   };
 
-  const getStatusColor = (status) => {
+  const getBudgetStatusColor = (status) => {
     switch (status) {
-      case 'completed': return 'success';
-      case 'in_progress': return 'warning';
-      case 'planned': return 'info';
-      case 'cancelled': return 'error';
+      case 'within_budget': return 'success';
+      case 'over_budget': return 'error';
+      case 'not_set': return 'warning';
       default: return 'default';
     }
   };
 
-  const totals = calculateTotals();
+  const getBudgetStatusLabel = (status) => {
+    switch (status) {
+      case 'within_budget': return 'Within Budget';
+      case 'over_budget': return 'Over Budget';
+      case 'not_set': return 'Budget Not Set';
+      default: return 'Unknown';
+    }
+  };
+
+  const getBudgetProgress = () => {
+    if (budgetData.allocated_amount === 0) return 0;
+    return Math.min((budgetData.total_spent / budgetData.allocated_amount) * 100, 100);
+  };
 
   return (
     <Box>
       {/* Header Section */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h5" component="h1">
+          <BudgetIcon sx={{ verticalAlign: 'middle', mr: 1 }} />
           Event Budget
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => openEditDialog()}
-        >
-          Add Budget Item
-        </Button>
+        <Box display="flex" gap={1}>
+          <Button
+            variant="outlined"
+            startIcon={<BudgetIcon />}
+            onClick={openBudgetDialog}
+          >
+            Set Budget
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => openEditDialog()}
+          >
+            Add Expense
+          </Button>
+        </Box>
       </Box>
 
       {/* Error Alert */}
@@ -223,49 +293,111 @@ const EventBudget = ({ eventId, showNotification }) => {
         </Alert>
       )}
 
-      {/* Summary Cards */}
+      {/* Budget Overview Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12} md={3}>
           <Card>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>
-                Total Expenses
+                Allocated Budget
               </Typography>
-              <Typography variant="h4" component="div">
-                ${totals.totalSpent.toFixed(2)}
+              <Typography variant="h4" component="div" color="primary">
+                ${budgetData.allocated_amount.toFixed(2)}
               </Typography>
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12} md={3}>
           <Card>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>
-                Total Items
+                Total Spent
               </Typography>
-              <Typography variant="h4" component="div">
-                {totals.itemCount}
+              <Typography variant="h4" component="div" color="error">
+                ${budgetData.total_spent.toFixed(2)}
               </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <Card>
+            <CardContent>
+              <Typography color="text.secondary" gutterBottom>
+                Remaining Budget
+              </Typography>
+              <Typography 
+                variant="h4" 
+                component="div" 
+                color={budgetData.remaining_budget >= 0 ? "success.main" : "error.main"}
+              >
+                ${budgetData.remaining_budget.toFixed(2)}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <Card>
+            <CardContent>
+              <Typography color="text.secondary" gutterBottom>
+                Budget Status
+              </Typography>
+              <Chip 
+                label={getBudgetStatusLabel(budgetData.budget_status)}
+                color={getBudgetStatusColor(budgetData.budget_status)}
+                sx={{ mt: 1 }}
+              />
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
-      {/* Budget Items Table */}
+      {/* Budget Progress */}
+      {budgetData.allocated_amount > 0 && (
+        <Card sx={{ mb: 3 }}>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>
+              Budget Usage
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+              <Box sx={{ width: '100%', mr: 1 }}>
+                <LinearProgress 
+                  variant="determinate" 
+                  value={getBudgetProgress()} 
+                  color={budgetData.budget_status === 'over_budget' ? 'error' : 'primary'}
+                  sx={{ height: 10, borderRadius: 5 }}
+                />
+              </Box>
+              <Box sx={{ minWidth: 35 }}>
+                <Typography variant="body2" color="text.secondary">
+                  {getBudgetProgress().toFixed(1)}%
+                </Typography>
+              </Box>
+            </Box>
+            <Typography variant="body2" color="text.secondary">
+              ${budgetData.total_spent.toFixed(2)} of ${budgetData.allocated_amount.toFixed(2)} used
+            </Typography>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Expenses Table */}
       <Card>
         <CardContent>
+          <Typography variant="h6" gutterBottom>
+            Expense Details
+          </Typography>
           {loading ? (
             <Box display="flex" justifyContent="center" py={4}>
               <CircularProgress />
             </Box>
-          ) : budgetItems.length === 0 ? (
+          ) : budgetData.expenses.length === 0 ? (
             <Box textAlign="center" py={4}>
-              <AttachMoney sx={{ fontSize: 60, color: 'text.secondary', mb: 1 }} />
+              <ReceiptIcon sx={{ fontSize: 60, color: 'text.secondary', mb: 1 }} />
               <Typography variant="h6" gutterBottom>
-                No Budget Items
+                No Expenses Added
               </Typography>
               <Typography color="text.secondary">
-                Add budget items to start tracking your event expenses
+                Add expenses to start tracking your event budget
               </Typography>
             </Box>
           ) : (
@@ -275,39 +407,59 @@ const EventBudget = ({ eventId, showNotification }) => {
                   <TableRow>
                     <TableCell>Description</TableCell>
                     <TableCell align="right">Amount</TableCell>
-                    <TableCell>Date</TableCell>
+                    <TableCell>Date Added</TableCell>
                     <TableCell>Added By</TableCell>
+                    <TableCell>Receipt</TableCell>
                     <TableCell align="center">Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {budgetItems.map((item) => (
-                    <TableRow key={item.expense_id}>
+                  {budgetData.expenses.map((expense) => (
+                    <TableRow key={expense.expense_id}>
                       <TableCell>
                         <Typography fontWeight="medium">
-                          {item.description}
+                          {expense.description}
                         </Typography>
                       </TableCell>
                       <TableCell align="right">
-                        ${parseFloat(item.amount || 0).toFixed(2)}
+                        <Typography fontWeight="bold">
+                          ${parseFloat(expense.amount || 0).toFixed(2)}
+                        </Typography>
                       </TableCell>
                       <TableCell>
-                        {item.created_at ? new Date(item.created_at).toLocaleDateString() : 'N/A'}
+                        {expense.created_at ? new Date(expense.created_at).toLocaleDateString() : 'N/A'}
                       </TableCell>
                       <TableCell>
-                        {item.uploaded_by_name || 'Unknown'}
+                        {expense.uploaded_by_name || 'Unknown'}
+                      </TableCell>
+                      <TableCell>
+                        {expense.receipt_url ? (
+                          <Chip 
+                            label="View Receipt" 
+                            size="small" 
+                            color="primary" 
+                            variant="outlined"
+                            icon={<ReceiptIcon />}
+                            onClick={() => window.open(expense.receipt_url, '_blank')}
+                            sx={{ cursor: 'pointer' }}
+                          />
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            No receipt
+                          </Typography>
+                        )}
                       </TableCell>
                       <TableCell align="center">
                         <IconButton
                           size="small"
-                          onClick={() => openEditDialog(item)}
+                          onClick={() => openEditDialog(expense)}
                           sx={{ mr: 1 }}
                         >
                           <EditIcon />
                         </IconButton>
                         <IconButton
                           size="small"
-                          onClick={() => handleDelete(item.expense_id)}
+                          onClick={() => handleDelete(expense.expense_id)}
                           color="error"
                         >
                           <DeleteIcon />
@@ -322,10 +474,52 @@ const EventBudget = ({ eventId, showNotification }) => {
         </CardContent>
       </Card>
 
-      {/* Add/Edit Dialog */}
+      {/* Budget Allocation Dialog */}
+      <Dialog open={budgetDialogOpen} onClose={() => setBudgetDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          Set Budget Allocation
+          <IconButton
+            aria-label="close"
+            onClick={() => setBudgetDialogOpen(false)}
+            sx={{
+              position: 'absolute',
+              right: 8,
+              top: 8,
+              color: (theme) => theme.palette.grey[500],
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <form onSubmit={handleBudgetSubmit}>
+          <DialogContent>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Set the total budget allocation for this event. This will help track expenses and budget usage.
+            </Typography>
+            <TextField
+              fullWidth
+              label="Allocated Amount ($)"
+              type="number"
+              value={budgetFormData.allocated_amount}
+              onChange={(e) => setBudgetFormData({ ...budgetFormData, allocated_amount: e.target.value })}
+              inputProps={{ min: 0, step: 0.01 }}
+              required
+              sx={{ mt: 2 }}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setBudgetDialogOpen(false)}>Cancel</Button>
+            <Button type="submit" variant="contained">
+              Update Budget
+            </Button>
+          </DialogActions>
+        </form>
+      </Dialog>
+
+      {/* Add/Edit Expense Dialog */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {editingItem ? 'Edit Budget Item' : 'Add Budget Item'}
+          {editingItem ? 'Edit Expense' : 'Add Expense'}
           <IconButton
             aria-label="close"
             onClick={() => setDialogOpen(false)}
@@ -339,7 +533,7 @@ const EventBudget = ({ eventId, showNotification }) => {
             <CloseIcon />
           </IconButton>
         </DialogTitle>
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleExpenseSubmit}>
           <DialogContent>
             <Grid container spacing={2} sx={{ mt: 1 }}>
               <Grid item xs={12}>
@@ -351,12 +545,13 @@ const EventBudget = ({ eventId, showNotification }) => {
                   required
                   multiline
                   rows={2}
+                  placeholder="Enter expense description..."
                 />
               </Grid>
               <Grid item xs={12}>
                 <TextField
                   fullWidth
-                  label="Amount"
+                  label="Amount ($)"
                   type="number"
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
@@ -364,16 +559,48 @@ const EventBudget = ({ eventId, showNotification }) => {
                   required
                 />
               </Grid>
+              {!editingItem && (
+                <Grid item xs={12}>
+                  <Typography variant="body2" gutterBottom>
+                    Receipt (Optional)
+                  </Typography>
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={(e) => setFormData({ ...formData, receipt: e.target.files[0] })}
+                    style={{ width: '100%' }}
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    Supported formats: Images (JPG, PNG) and PDF
+                  </Typography>
+                </Grid>
+              )}
             </Grid>
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
             <Button type="submit" variant="contained">
-              {editingItem ? 'Update' : 'Add'} Item
+              {editingItem ? 'Update' : 'Add'} Expense
             </Button>
           </DialogActions>
         </form>
       </Dialog>
+
+      {/* Internal Snackbar for notifications when showNotification prop is not provided */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert 
+          onClose={() => setSnackbar({ ...snackbar, open: false })} 
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

@@ -34,6 +34,9 @@ from .expense import Expense
 # ==== System utilities ====
 from .system_log import SystemLog
 
+# ==== Email verification ====
+from .email_verification import EmailVerification
+
 # ==== Postings ====
 from .admin_posting import AdminPosting
 from .volunteer_posting import VolunteerPosting 
@@ -51,7 +54,8 @@ def init_models():
         attendance, feedback, message, notification,
         event_budget, expense, system_log, event_document, 
         UserEventAssociation, EventAttendance, EventChat,
-        AdminPosting, VolunteerPosting, EventFeedback, VolunteerApplication
+        AdminPosting, VolunteerPosting, EventFeedback, VolunteerApplication,
+        email_verification
     )
     db.configure_mappers()
 
@@ -95,6 +99,9 @@ __all__ = [
 
     # System
     'SystemLog',
+
+    # Email verification
+    'EmailVerification',
 
     # Postings
     'AdminPosting',
